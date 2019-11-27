@@ -2,7 +2,7 @@ The Ultimate Calculus
 =====================
 
 An optimal, **full** λ-calculus evaluator that doesn't rely on interaction
-combinators and can be implemented in [130 lines](core.js).
+combinators and can be implemented in [150 lines](core.js).
 
 Example
 -------
@@ -45,7 +45,7 @@ runtime fusion, but it has two main problems:
   awkward to implement in pure functional languages.
 
 The Ultimate Calculus is a **superset** of the λ-calculus that can be fully
-implemented in 130 lines of idiomatic Haskell. With it, you can still perform
+implemented in 150 lines of idiomatic Haskell. With it, you can still perform
 optimal, parallel, O(1) reductions by manually decorating your λ-terms with
 explicit duplications. If you don't, though, the algorithm gracefully falls
 back to traditional sharing techniques, allowing you to have full λ-terms.

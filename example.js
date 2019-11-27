@@ -32,6 +32,13 @@ const full_lambda = `
   main (c2 c2)
 `;
 
+// An unscoped duplication example
+const unscoped = `
+  foo {x}{t}((t x) x)
+  bar {k}((k u) {u}{y}y)
+  main (foo bar)
+`;
+
 const run_example = (name, example) => {
   var env = pc.syntax.parse(example);
   console.log("Running", name);
@@ -43,3 +50,4 @@ const run_example = (name, example) => {
 run_example("recursion", recursion);
 run_example("many_nots", many_nots);
 run_example("full_lambda", full_lambda);
+run_example("unscoped", unscoped);

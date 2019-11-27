@@ -54,6 +54,7 @@ function reduce(term, env, weak = false) {
         var a1 = App(func.val1, Var(x1));
         return reduce(Let(x0, x1, term.argm, Par(a0, a1)), env, weak);
       } else {
+        var func = weak_reduce(term.func, env, weak);
         var argm = weak_reduce(term.argm, env, weak);
         return App(func, argm);
       }
@@ -81,6 +82,7 @@ function reduce(term, env, weak = false) {
         env[term.nam1] = () => expr.val1;
         return reduce(term.body, env, weak);
       } else {
+        var expr = weak_reduce(term.expr, env, weak);
         var body = weak_reduce(term.body, env, weak);
         return Let(term.nam0, term.nam1, expr, body);
       }
@@ -105,28 +107,54 @@ function fresh(env) {
 
 // Makes a deep copy of a term, renaming its bound variables to fresh ones
 function copy(term, env) {
-  var rename = {};
-  function go(term) {
+  var name = {};
+  function build_name(term) {
     switch (term.ctor) {
       case "Lam":
-        var n0 = fresh(env);
-        rename[term.name] = n0;
-        return Lam(n0, go(term.body));
+        name[term.name] = fresh(env);
+        build_name(term.body)
+        break;
       case "App":
-        return App(go(term.func), go(term.argm));
+        build_name(term.func);
+        build_name(term.argm);
+        break;
       case "Par":
-        return Par(go(term.val0), go(term.val1));
+        build_name(term.val0);
+        build_name(term.val1);
+        break;
       case "Let":
-        var n0 = fresh(env);
-        var n1 = fresh(env);
-        rename[term.nam0] = n0;
-        rename[term.nam1] = n1;
-        return Let(n0, n1, go(term.expr), go(term.body));
+        name[term.nam0] = fresh(env);
+        name[term.nam1] = fresh(env);
+        build_name(term.expr);
+        build_name(term.body);
+        break;
       case "Var":
-        return Var(rename[term.name] || term.name);
+        break;
     }
   };
-  return go(term);
+  function rename(term) {
+    switch (term.ctor) {
+      case "Lam":
+        var body = rename(term.body);
+        return Lam(name[term.name], body);
+      case "App":
+        var func = rename(term.func);
+        var argm = rename(term.argm);
+        return App(func, argm)
+      case "Par":
+        var val0 = rename(term.val0);
+        var val1 = rename(term.val1);
+        return Par(val0, val1);
+      case "Let":
+        var expr = rename(term.expr);
+        var body = rename(term.body);
+        return Let(name[term.nam0], name[term.nam1], expr, body);
+      case "Var":
+        return Var(name[term.name] || term.name);
+    }
+  };
+  build_name(term);
+  return rename(term);
 };
 
 module.exports = {Lam, App, Par, Let, Var, reduce, fresh, copy};

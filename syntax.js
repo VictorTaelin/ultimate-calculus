@@ -14,7 +14,7 @@ function show(term) {
     case App: {
       const func = show(term.func);
       const argm = show(term.argm);
-      return `(${func} ${argm })`;
+      return `(${func} ${argm})`;
     }
     case Par: {
       const val0 = show(term.val0);

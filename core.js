@@ -5,18 +5,18 @@
 //   | [term,term]            -- pair
 //   | let [x,y] = term; term -- projection
 //   | x                      -- variable
-const Lam = (name, body)             => ({ctor: "Lam", name, body});
-const App = (func, argm)             => ({ctor: "App", func, argm});
-const Par = (val0, val1)             => ({ctor: "Par", val0, val1});
-const Let = (nam0, nam1, expr, body) => ({ctor: "Let", nam0, nam1, expr, body});
-const Var = (name)                   => ({ctor: "Var", name});
+const Lam = (name, body)             => ({tag: Lam, name, body});
+const App = (func, argm)             => ({tag: App, func, argm});
+const Par = (val0, val1)             => ({tag: Par, val0, val1});
+const Let = (nam0, nam1, expr, body) => ({tag: Let, nam0, nam1, expr, body});
+const Var = (name)                   => ({tag: Var, name});
 
 // Its reduction rules are defined as:
-// 
+//
 // (({x}f) a)
 // ---------- (app-lam)
 // f [x <- a]
-// 
+//
 // let [x,y] = [a,b]; t
 // -------------------- (let-par)
 // t [x <- a][y <- b]
@@ -28,67 +28,71 @@ const Var = (name)                   => ({ctor: "Var", name});
 // ([a,b] c)
 // -------------------------------- (app-par)
 // let [x0,x1] = c; [(a x0),(b x1)]
-// 
+//
 // Here, [x <- a] stands for global name-capture-avoiding substitution.
 function reduce(term, env, weak = false) {
-  const weak_reduce = (term, env, weak) => {
-    return weak ? term : reduce(term, env, weak);
-  }
-  switch (term.ctor) {
-    case "Lam":
-      var body = weak_reduce(term.body, env, weak);
+  const weak_reduce = (term, env, weak) => (
+    weak ? term : reduce(term, env, weak)
+  );
+  switch (term.tag) {
+    case Lam: {
+      const body = weak_reduce(term.body, env, weak);
       return Lam(term.name, body);
-    case "App":
-      var func = reduce(term.func, env, true);
+    }
+    case App: {
+      const func = reduce(term.func, env, true);
       // App-Lam
-      if (func.ctor === "Lam") {
+      if (func.tag === Lam) {
         env._rwts++;
         env[func.name] = () => term.argm;
         return reduce(func.body, env, weak);
       // App-Par
-      } else if (func.ctor === "Par") {
+      } else if (func.tag === Par) {
         env._rwts++;
-        var x0 = fresh(env);
-        var x1 = fresh(env);
-        var a0 = App(func.val0, Var(x0));
-        var a1 = App(func.val1, Var(x1));
+        const x0 = fresh(env);
+        const x1 = fresh(env);
+        const a0 = App(func.val0, Var(x0));
+        const a1 = App(func.val1, Var(x1));
         return reduce(Let(x0, x1, term.argm, Par(a0, a1)), env, weak);
       } else {
-        var func = weak_reduce(term.func, env, weak);
-        var argm = weak_reduce(term.argm, env, weak);
+        const func = weak_reduce(term.func, env, weak);
+        const argm = weak_reduce(term.argm, env, weak);
         return App(func, argm);
       }
-    case "Par": 
-      var val0 = weak_reduce(term.val0, env, weak);
-      var val1 = weak_reduce(term.val1, env, weak);
+    }
+    case Par: {
+      const val0 = weak_reduce(term.val0, env, weak);
+      const val1 = weak_reduce(term.val1, env, weak);
       return Par(val0, val1);
-    case "Let":
-      var expr = reduce(term.expr, env, true);
+    }
+    case Let: {
+      const expr = reduce(term.expr, env, true);
       // Let-Lam
-      if (expr.ctor === "Lam") {
+      if (expr.tag === Lam) {
         env._rwts++;
-        var n0 = fresh(env);
-        var n1 = fresh(env);
-        var x0 = fresh(env);
-        var x1 = fresh(env);
+        const n0 = fresh(env);
+        const n1 = fresh(env);
+        const x0 = fresh(env);
+        const x1 = fresh(env);
         env[term.nam0] = () => Lam(x0, Var(n0));
         env[term.nam1] = () => Lam(x1, Var(n1));
         env[expr.name] = () => Par(Var(x0), Var(x1));
         return reduce(Let(n0, n1, expr.body, term.body), env, weak);
       // Let-Par
-      } else if (expr.ctor === "Par") {
+      } else if (expr.tag === Par) {
         env._rwts++;
         env[term.nam0] = () => expr.val0;
         env[term.nam1] = () => expr.val1;
         return reduce(term.body, env, weak);
       } else {
-        var expr = weak_reduce(term.expr, env, weak);
-        var body = weak_reduce(term.body, env, weak);
+        const expr = weak_reduce(term.expr, env, weak);
+        const body = weak_reduce(term.body, env, weak);
         return Let(term.nam0, term.nam1, expr, body);
       }
-    case "Var":
+    }
+    case Var: {
       if (env[term.name]) {
-        var value = env[term.name]();
+        const value = env[term.name]();
         env[term.name] = () => {
           env._cpys++;
           return copy(value, env);
@@ -97,62 +101,72 @@ function reduce(term, env, weak = false) {
       } else {
         return term;
       }
+    }
   }
 };
 
 // Creates a fresh name
 function fresh(env) {
-  return "x" + (env._size = (env._size || 0) + 1);
-};
+  return `x${(env._size = (env._size || 0) + 1)}`;
+}
 
 // Makes a deep copy of a term, renaming its bound variables to fresh ones
 function copy(term, env) {
-  var name = {};
+  const name = {};
   function build_name(term) {
-    switch (term.ctor) {
-      case "Lam":
+    switch (term.tag) {
+      case Lam: {
         name[term.name] = fresh(env);
         build_name(term.body)
         break;
-      case "App":
+      }
+      case App: {
         build_name(term.func);
         build_name(term.argm);
         break;
-      case "Par":
+      }
+      case Par: {
         build_name(term.val0);
         build_name(term.val1);
         break;
-      case "Let":
+      }
+      case Let: {
         name[term.nam0] = fresh(env);
         name[term.nam1] = fresh(env);
         build_name(term.expr);
         build_name(term.body);
         break;
-      case "Var":
+      }
+      case Var:
         break;
     }
-  };
+  }
   function rename(term) {
-    switch (term.ctor) {
-      case "Lam":
-        var body = rename(term.body);
+    switch (term.tag) {
+      case Lam: {
+        const body = rename(term.body);
         return Lam(name[term.name], body);
-      case "App":
-        var func = rename(term.func);
-        var argm = rename(term.argm);
-        return App(func, argm)
-      case "Par":
-        var val0 = rename(term.val0);
-        var val1 = rename(term.val1);
+      }
+      case App: {
+        const func = rename(term.func);
+        const argm = rename(term.argm);
+        return App(func, argm);
+      }
+      case Par: {
+        const val0 = rename(term.val0);
+        const val1 = rename(term.val1);
         return Par(val0, val1);
-      case "Let":
-        var expr = rename(term.expr);
-        var body = rename(term.body);
+      }
+      case Let: {
+        const expr = rename(term.expr);
+        const body = rename(term.body);
         return Let(name[term.nam0], name[term.nam1], expr, body);
-      case "Var":
+      }
+      case Var: {
         return Var(name[term.name] || term.name);
+      }
     }
-  };
+  }
   build_name(term);
   return rename(term);
 };

@@ -1,4 +1,4 @@
-var pc = require("./index.js");
+const pc = require("./index.js");
 
 // Applies not 4b times
 const many_nots = `
@@ -40,7 +40,7 @@ const unscoped = `
 `;
 
 const run_example = (name, example) => {
-  var env = pc.syntax.parse(example);
+  const env = pc.syntax.parse(example);
   console.log("Running", name);
   console.log("- norm:", pc.syntax.show(pc.core.reduce(env.main(), env)));
   console.log("- rwts:", env._rwts);

@@ -9,7 +9,7 @@ function show(term) {
     case Lam: {
       const name = term.name;
       const body = show(term.body);
-      return `${name} ${body}`;
+      return `{${name}} ${body}`;
     }
     case App: {
       const func = show(term.func);

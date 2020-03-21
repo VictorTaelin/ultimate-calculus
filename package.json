@@ -1,8 +1,8 @@
 {
-  "name": "ultimate-calculus",
+  "name": "cruel-lambda-thesis",
   "version": "0.1.0",
-  "description": "The Ultimate Calculus =====================",
-  "main": "index.js",
+  "description": "Cruel Lambda Thesis",
+  "main": "core.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },

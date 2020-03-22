@@ -259,18 +259,26 @@ function parse(code) {
 
   const parse_let = () => {
     if (match("let")) {
-      var skip = consume("[");
-      var kind = parse_name();
-      var skip = consume("|");
-      var nam0 = parse_name();
-      var skip = consume(",");
-      var nam1 = parse_name();
-      var skip = consume("]");
-      var skip = consume("=");
-      var expr = parse_term();
-      var skip = consume(";");
-      var body = parse_term();
-      return Let(kind, nam0, nam1, expr, body);
+      if (match("[")) {
+        var kind = parse_name();
+        var skip = consume("|");
+        var nam0 = parse_name();
+        var skip = consume(",");
+        var nam1 = parse_name();
+        var skip = consume("]");
+        var skip = consume("=");
+        var expr = parse_term();
+        var skip = consume(";");
+        var body = parse_term();
+        return Let(kind, nam0, nam1, expr, body);
+      } else {
+        var name = parse_name();
+        var skip = consume("=");
+        var expr = parse_term();
+        var skip = consume(";");
+        var body = parse_term();
+        return App(Lam(name, body), expr);
+      }
     }
   };
 

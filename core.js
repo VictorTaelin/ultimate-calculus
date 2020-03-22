@@ -149,10 +149,10 @@ function normalize(term, env = null) {
   var last_rwts = null;
   while (last_rwts !== env._rwts) {
     last_rwts = env._rwts;
-    console.log("pass", show(term));
+    //console.log("pass", show(term));
     term = reduce(term, env);
   };
-  return {term, stats: {rewrites: env._wrts}};
+  return {term, stat: {rewrites: env._rwts}};
 };
 
 // Creates a fresh name
@@ -160,7 +160,7 @@ function fresh(env) {
   return "x" + (env._size = (env._size || 0) + 1);
 };
 
-// Stringifier
+// Stringifies a term
 function show(term) {
   switch (term.ctor) {
     case "Var":
@@ -188,7 +188,7 @@ function show(term) {
   }
 };
 
-// Parser
+// Parses a code
 function parse(code) {
   var idx = 0;
 
@@ -294,6 +294,114 @@ function parse(code) {
   return parse_term();
 };
 
+// Generates a name from a number
+function nth_name(n) {
+  var str = "";
+  ++n;
+  while (n > 0) {
+    --n;
+    str += String.fromCharCode(97 + n % 26);
+    n = Math.floor(n / 26);
+  }
+  return str;
+};
+
+// Converts a Lambda-Calculus term to an Ultimate Calculus term
+function lambda_to_ultimate(term) {
+  var vars = 0;
+  var lets = 0;
+  function go0(term, lams) {
+    switch (term.ctor) {
+      case "Lam":
+        var lamb = Lam(nth_name(vars++), null);
+        var lams = {...lams, [term.name]: lamb};
+        lamb.uses = 0;
+        lamb.body = go0(term.body, lams);
+        return lamb;
+      case "App":
+        var func = go0(term.func, lams);
+        var argm = go0(term.argm, lams);
+        return App(func, argm);
+      case "Var":
+        return Var(lams[term.name].name + (lams[term.name].uses++));
+    }
+  };
+  function go1(term) {
+    switch (term.ctor) {
+      case "Lam":
+        var body = go1(term.body);
+        if (term.uses > 1) {
+          for (var i = 0; i < term.uses - 1; ++i) {
+            var nam0 = term.name+(i*2+0);
+            var nam1 = term.name+(i*2+1);
+            var expr = Var(term.name + (i === term.uses-2 ? "" : (term.uses+i)));
+            body = Let(nth_name(lets++), nam0, nam1, expr, body);
+          };
+        } else if (term.uses === 1) {
+          term.name = term.name + "0";
+        } else {
+          term.name = "-" + term.name;
+        };
+        return Lam(term.name, body);
+      case "App":
+        var func = go1(term.func);
+        var argm = go1(term.argm);
+        return App(func, argm);
+      case "Var":
+        return Var(term.name);
+    }
+  };
+  return go1(go0(term, {}));
+};
+
+// Converts an Ultimate-Calculus term to a Lambda-Calculus term
+function ultimate_to_lambda(term, path="", subs={}, dep=0) {
+  switch (term.ctor) {
+    case "Lam":
+      var new_subs = {...subs, [term.name]: Var("##"+nth_name(dep))};
+      var body = ultimate_to_lambda(term.body, path, new_subs, dep+1);
+      return Lam(nth_name(dep), body);
+    case "App":
+      var func = ultimate_to_lambda(term.func,path,subs,dep);
+      var argm = ultimate_to_lambda(term.argm,path,subs,dep);
+      return App(func, argm);
+    case "Par":
+      if (path[0] === "0") {
+        return ultimate_to_lambda(term.val0,path.slice(1),subs,dep);
+      } else if (path[0] === "1") {
+        return ultimate_to_lambda(term.val1,path.slice(1),subs,dep);
+      } else {
+        throw "Not a valid Lambda-Term.";
+      };
+    case "Let":
+      var val0 = {ctor:"Go0", expr: term.expr};
+      var val1 = {ctor:"Go1", expr: term.expr};
+      var new_subs = {...subs, [term.nam0]: val0, [term.nam1]: val1};
+      return ultimate_to_lambda(term.body, path, new_subs, dep); 
+    case "Go0":
+      return ultimate_to_lambda(term.expr, "0"+path, subs, dep);
+    case "Go1":
+      return ultimate_to_lambda(term.expr, "1"+path, subs, dep);
+    case "Var":
+      var got = subs[term.name];
+      if (got) {
+        return ultimate_to_lambda(got, path, subs, dep);
+      } else {
+        return Var(term.name.replace("##",""));
+      };
+  };
+};
+
+// Parses a Lambda-Term into an Ultimate-Term
+function parse_lambda(code) {
+  return lambda_to_ultimate(parse(code));
+};
+
+// Stringifies an Ultimate-Term as a Lambda-Term
+function show_lambda(term) {
+  return show(ultimate_to_lambda(term));
+};
+
 module.exports = {
   Lam,
   App,
@@ -304,5 +412,9 @@ module.exports = {
   normalize,
   fresh,
   show,
-  parse
+  parse,
+  lambda_to_ultimate,
+  ultimate_to_lambda,
+  parse_lambda,
+  show_lambda,
 };

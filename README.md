@@ -4,26 +4,30 @@ The Ultimate Calculus
 An optimal, **full** λ-calculus evaluator that doesn't rely on interaction
 combinators and can be implemented in [150 lines](core.js).
 
-Example
--------
+Usage
+-----
 
-The following program applies the `not` function `2^32` (4 billion) times to
-the boolean `true` and returns instantly, showing we can perform [runtime
-fusion](https://medium.com/@maiavictor/solving-the-mystery-behind-abstract-algorithms-magical-optimizations-144225164b07):
+Install it with:
 
 ```
-main
-  ((4294967296n not) true)
+npm i -g ultimate-calculus
 ```
 
-The following program computes the normal form of `(λs.λz.(s (s z)) λs.λz.(s (s
-z)))`, showing we can evaluate non-stratified terms:
+To evaluate an Ultimate Calculus term:
 
 ```
-main (({s} {z} (s (s z))) ({s} {z} (s (s z))))
+echo "({g} {y} let [A| g0, g1] = g; (g0 (g1 y)) {x} x)" >> main.ult
+ult main.ult
 ```
 
-For more examples, check [`example.js`](example.js).
+To evaluate a Lambda Calculus term:
+
+```
+echo "({f}{x}(f (f x)) {f}{x}(f (f x)))" >> main.lam
+ult main.lam
+```
+
+You can also use it as a library. Check `example.js`.
 
 Wait, what?
 -----------
@@ -102,35 +106,54 @@ Its reduction rules are the following:
 ```haskell
 (({x}f) a)
 ---------- (app-lam)
-f [x <- a]
+x <- a
+f
 
-let [x,y] = [a,b]; t
--------------------- (let-par)
-t [x <- a] [y <- b]
+([A|a,b] c)
+----------- (app-par)
+let [A|x0,x1] = c; [(a x0),(b x1)]
 
-let [u,v] = {x} f; t
---------------------------------------------------------- (let-lam)
-let [p,q] = f; t [u <- {x0}p][v <- {x1}q][x <- [x0,x1]]
+(let [A|x0,x1] = a; b c)
+------------------------ (app-let)
+let [A|x0,x1] = a; (b c)
 
-([a,b] c)
--------------------------------- (app-par)
-let [x0,x1] = c; [(a x0),(b x1)]
+let [A|x,y] = {x} f; t
+---------------------- (let-lam)
+p <- {x0} p
+q <- {x1} q
+x <- [A|x0,x1]
+let [A|x0,x1] = f; t
+
+let [A|x,y] = [B|a,b]; t
+------------------------ (let-par)
+if A == B then
+  x <- a
+  y <- b
+  t
+else
+  x <- [B0|xA,xB]
+  y <- [B1|yA,yB]
+  let [A|xA,yA] = a; let [A|xB,yB] = b; t
+
+let [A|x0,x1] = let [B|y0,y1] = a; b; c
+--------------------------------------- (let-let)
+let [B|y0,y1] = a; let [A|x0,x1] = b; c
 ```
 
-Here, `[x <- a]` stands for global, capture-avoiding substitution of `x` by
-`a`. As long as variables only occur once, all of those reduction rules are
-`O(1)`, since they only perform a direct substitution of constructors and a
-single pointer swapping. When variables are used more than once, they require a
-deep copy of a term, replacing its variables with fresh names. That copy can
-then use alternative sharing strategies such as closures or just direct copies.
-This allows us to maintain full λ-calculus compatibility.
+Here, `x <- a` stands for global, capture-avoiding substitution of `x` by `a`.
+As long as variables only occur once, all of those reduction rules are `O(1)`,
+since they only perform a direct substitution of constructors and a single
+pointer swapping. When variables are used more than once, they require a deep
+copy of a term, replacing its variables with fresh names. That copy can then use
+alternative sharing strategies such as closures or just direct copies.  This
+allows us to maintain full λ-calculus compatibility.
 
 The `let-lam` rule, which performs the "pair projection" in a lambda is key for
 optimal reductions, since it splits the lambda in two separate, but "connected"
 terms. This allows us to perform a lazy, granular copy of them, which, in turn,
-allows us to express optimal sharing with careful placement of `let`s. Note
-that it *can't* be used indiscriminately to copy values, since using `let` to
-copy a term which itself has a `let` or a `pair` will be unsound w.r.t expected
+allows us to express optimal sharing with careful placement of `let`s. Note that
+it *can't* be used indiscriminately to copy values, since using `let` to copy a
+term which itself has a `let` or a `pair` will be unsound w.r.t expected
 λ-calculus semantics. In other words, `let` should be either added carefuly, or
 by a compiler when it knows it is safe to do so. Of course, nothing prevents you
 from just using the Ultimate Calculus as the reference, in which case you can

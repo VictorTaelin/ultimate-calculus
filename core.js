@@ -172,7 +172,7 @@ function normalize(term, env = null) {
 
 // Creates a fresh name
 function fresh(env) {
-  return "x" + (env._size = (env._size || 0) + 1);
+  return "$" + (env._size = (env._size || 0) + 1);
 };
 
 // Stringifies a term

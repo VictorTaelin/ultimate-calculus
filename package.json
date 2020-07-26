@@ -1,6 +1,6 @@
 {
   "name": "ultimate-calculus",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Cruel Lambda Thesis",
   "main": "core.js",
   "bin": {

@@ -117,8 +117,8 @@ function reduce(term, env = null) {
           env[term.nam0] = Par(expr.kind, Var(x0), Var(x1));
           env[term.nam1] = Par(expr.kind, Var(y0), Var(y1));
           var done = term.body;
-          var done = Let(term.kind+"<", x1, y1, expr.val1, done);
-          var done = Let(term.kind+">", x0, y0, expr.val0, done);
+          var done = Let(term.kind, x1, y1, expr.val1, done);
+          var done = Let(term.kind, x0, y0, expr.val0, done);
           return reduce(done, env);
         }
       // Let-Let
@@ -157,7 +157,7 @@ function normalize(term, env = null) {
 
 // Creates a fresh name
 function fresh(env) {
-  return "x" + (env._size = (env._size || 0) + 1);
+  return "$" + (env._size = (env._size || 0) + 1);
 };
 
 // Stringifies a term

@@ -49,7 +49,13 @@ const Lam = (name, body)                   => ({ctor: "Lam", name, body});
 const App = (func, argm)                   => ({ctor: "App", func, argm});
 const Par = (kind, val0, val1)             => ({ctor: "Par", kind, val0, val1});
 const Let = (kind, nam0, nam1, expr, body) => ({ctor: "Let", kind, nam0, nam1, expr, body});
+const Box = (expr)                         => ({ctor: "Box", expr});
 const Var = (name)                         => ({ctor: "Var", name});
+
+//(λx. dup 0[a,b] = x; (a #b)) #(λy. dup 0[c,d] = y; (c #d)) 
+//(dup 0[a,b] = #(λy. dup 0[c,d] = y; (c #d)); (a #b)) 
+//(dup 1[a,b] = (λy. dup 0[c,d] = y; (c #d)); (a #b))
+//(dup 1[a,b] = (λy. dup 0[c,d] = y; (c #d)); (a #b))
 
 // Reduces a term once
 function reduce(term, env = null) {
@@ -65,6 +71,9 @@ function reduce(term, env = null) {
         env._rwts++;
         env[func.name] = term.argm;
         return reduce(func.body, env);
+      // App-Box
+      } else if (func.ctor === "Box") {
+        return reduce(Box(App(func.expr, term.argm)), env);
       // App-Par
       } else if (func.ctor === "Par") {
         env._rwts++;
@@ -102,6 +111,9 @@ function reduce(term, env = null) {
         env[term.nam1] = Lam(x1, Var(n1));
         env[expr.name] = Par(kind, Var(x0), Var(x1));
         return reduce(Let(kind, n0, n1, expr.body, term.body), env);
+      // Let-Box
+      } else if (expr.ctor === "Box") {
+        return reduce(Let(kind+"+", term.nam0, term.nam1, expr.expr, term.body), env);
       // Let-Par
       } else if (expr.ctor === "Par") {
         env._rwts++;
@@ -117,8 +129,8 @@ function reduce(term, env = null) {
           env[term.nam0] = Par(expr.kind, Var(x0), Var(x1));
           env[term.nam1] = Par(expr.kind, Var(y0), Var(y1));
           var done = term.body;
-          var done = Let(term.kind+"<", x1, y1, expr.val1, done);
-          var done = Let(term.kind+">", x0, y0, expr.val0, done);
+          var done = Let(term.kind, x1, y1, expr.val1, done);
+          var done = Let(term.kind, x0, y0, expr.val0, done);
           return reduce(done, env);
         }
       // Let-Let
@@ -132,6 +144,9 @@ function reduce(term, env = null) {
         var body = reduce(term.body, env);
         return Let(kind, term.nam0, term.nam1, expr, body);
       }
+    case "Box":
+      var expr = reduce(term.expr, env);
+      return Box(expr);
     case "Var":
       if (env[term.name]) {
         var value = env[term.name];
@@ -185,6 +200,9 @@ function show(term) {
       var expr = show(term.expr);
       var body = show(term.body);
       return "let [" + kind + "|" + nam0 + "," + nam1 + "] = " + expr + "; " + body;
+    case "Box":
+      var expr = show(term.expr);
+      return "#"+expr;
   }
 };
 
@@ -282,6 +300,13 @@ function parse(code) {
     }
   };
 
+  const parse_box = () => {
+    if (match("#")) {
+      var expr = parse_term();
+      return Box(expr);
+    }
+  };
+
   const parse_var = () => {
     var name = parse_name();
     if (name.length !== 0) {
@@ -295,6 +320,7 @@ function parse(code) {
       || parse_app()
       || parse_par()
       || parse_let()
+      || parse_box()
       || parse_var();
     return term;
   };

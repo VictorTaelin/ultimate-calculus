@@ -23,6 +23,9 @@ try {
   console.log(e);
 }
 
+
+
+
 // Lambda-Calculus example
 //console.log("Lambda-Calculus example");
 //var lamb = uc.parse("({x}(x x) {f}{x}(f (f x)))");

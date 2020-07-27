@@ -130,6 +130,11 @@ function reduce(term, env = null) {
           var done = Let(term.kind, x0, y0, expr.val0, done);
           return reduce(done, env);
         }
+      // Let-Typ
+      } else if (expr.ctor === "Typ") {
+        env[term.nam0] = Typ();
+        env[term.nam1] = Typ();
+        return reduce(term.body, env);
       // Let-Let
       } else if (expr.ctor === "Let") {
         env._rwts++;
@@ -227,22 +232,33 @@ function typeinfer(term, env, ctx) {
       return Typ();
     case "App":
       var func_typ = typeinfer(term.func, env, ctx);
-      if (func_typ === "All") {
+      if (func_typ.ctor === "All") {
         var argm_typ = typeinfer(term.argm, env, ctx);
         typecheck(term.argm, func_typ.bind, env, ctx);
         // equal(func_typ.bind, argm_typ)
         return func_typ.body;
-      } else if (func_typ === "Sig") {
+      } else if (func_typ.ctor === "Sig") {
         throw "TODO";
       } else {
-        throw "Non-function application.";
+        throw "Bad app.";
       }
     case "Sig":
       return Typ();
     case "Par":
       break;
-    case "Let":
-      throw "TODO";
+    //case "Let":
+      //var expr_typ = typeinfer(term.expr, env, ctx);
+      //if (expr_typ.ctor === "All") {
+        //throw "TODO";
+      //} else if (expr_typ.ctor === "Sig") {
+        //throw "TODO";
+      //} else if (expr_typ.ctor === "Typ") {
+        //ctx[term.nam0] = Typ();
+        //ctx[term.nam1] = Typ();
+        //return typeinfer(term.body, env, ctx);
+      //} else {
+        //throw "Bad let.";
+      //}
     case "Var":
       if (ctx[term.name]) {
         return ctx[term.name];
@@ -268,6 +284,19 @@ function typecheck(term, type, env, ctx) {
         throw "Lambda isn't a function.\nTerm: "+show(term)+"\nType: "+show(typv);
       }
       break;
+    case "Let":
+      var expr_typ = typeinfer(term.expr, env, ctx);
+      if (expr_typ.ctor === "All") {
+        throw "TODO";
+      } else if (expr_typ.ctor === "Sig") {
+        throw "TODO";
+      } else if (expr_typ.ctor === "Typ") {
+        ctx[term.nam0] = Typ();
+        ctx[term.nam1] = Typ();
+        return typecheck(term.body, type, env, ctx);
+      } else {
+        throw "Bad let.";
+      }
     default:
       var infr = typeinfer(term, env, ctx);
       if (!same(infr, type)) {

@@ -2,8 +2,8 @@ var uc = require(".");
 
 // Ultimate-Calculus example
 
-var term = uc.parse(`λA. λB. λa. λb. b`);
-var type = uc.parse(`∀(A:*). ∀(B:*). let [K0| B0, B1] = B; ∀(x: ∀(y: B0). A). ∀(y: B1). B`);
+var term = uc.parse(`λA. λB. let [K| A0, A1] = A; λx. λy. x`);
+var type = uc.parse(`∀(A:*). ∀(B:*). let [K| A0, A1] = A; ∀(x: A0). ∀(y: B). A1`);
 var env = {_rwts:0};
 
 var {term: norm, stat} = uc.normalize(term);

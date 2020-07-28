@@ -168,7 +168,7 @@ function show(term) {
     case "Lam":
       var name = term.name;
       var body = show(term.body);
-      return "{" + name + "} " + body;
+      return "λ" + name + ". " + body;
     case "App":
       var func = show(term.func);
       var argm = show(term.argm);
@@ -228,9 +228,9 @@ function parse(code) {
   };
 
   const parse_lam = () => {
-    if (match("{")) {
+    if (match("λ")) {
       var name = parse_name();
-      var skip = consume("}");
+      var skip = consume(".");
       var body = parse_term();
       return Lam(name, body);
     }

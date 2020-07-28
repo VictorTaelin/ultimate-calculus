@@ -2,8 +2,8 @@ var uc = require(".");
 
 // Ultimate-Calculus example
 var code = `(
-  {g} {y} let [A| g0, g1] = g; (g0 (g1 y))
-  {f} {x} let [B| f0, f1] = f; (f0 (f1 x))
+  λg. λy. let [A| g0, g1] = g; (g0 (g1 y))
+  λf. λx. let [B| f0, f1] = f; (f0 (f1 x))
 )`;
 var term = uc.parse(code);
 var {term: norm, stat} = uc.normalize(term);
@@ -15,7 +15,7 @@ console.log("");
 
 // Lambda-Calculus example
 console.log("Lambda-Calculus example");
-var lamb = uc.parse("({x}(x x) {f}{x}(f (f x)))");
+var lamb = uc.parse("(λf.λx.(f (f x)) λf.λx.(f (f x)))");
 var ulti = uc.lambda_to_ultimate(lamb);
 console.log("- lamb-term:", uc.show(lamb));
 console.log("- ulti-term:", uc.show(ulti));

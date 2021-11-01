@@ -117,7 +117,7 @@ let [A|x0,x1] = c; [(a x0),(b x1)]
 ------------------------ (app-let)
 let [A|x0,x1] = a; (b c)
 
-let [A|x,y] = {x} f; t
+let [A|p,q] = {x} f; t
 ---------------------- (let-lam)
 p <- {x0} p
 q <- {x1} q

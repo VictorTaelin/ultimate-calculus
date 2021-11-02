@@ -1,3 +1,26 @@
+// O maior problema desse algoritmo é a função normalize,
+// pois não dá para chegar na forma normal simplesmente
+// fazendo uma recursão pela árvore do termo. Por conta
+// da ausência de escopos, redexes podem surgir "acima"
+// de onde o normalize já passou. Desse jeito, a única
+// forma de se chegar, de fato, à forma normal, é usando
+// o normalize várias vezes consecutivas. Exemplo:
+//   (t 1 (λt.0 λa.λb.a)) ~>
+//   (λa.b.a 1 0) ~>
+//   1
+// Nesse caso, o evaluator passaria batido pelo (t 1),
+// apenas substituindo posteriormente. Porém ele não
+// voltaria atrás pra continuar a redução, então uma
+// outra chamada a normalize() seria necessária. Para
+// que isso não aconteça, o certo seria o evaluator
+// entrar no "t", ir até o lambda, e subir para o pai
+// dele... porém esse link `lambda -> pai` não existe
+// nessa representação. Então seria necessário adicionar
+// o link dos pais. Mas aí, neste caso, voltamos ao
+// formato das interaction nets. A conclusão é que as
+// interaction nets não podem ser otimizados de modo a
+// evitar o ponteiro para o pai.
+
 // late 2021 version
 
 // The Optimal Calculus

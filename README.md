@@ -117,12 +117,12 @@ let [A|x0,x1] = c; [(a x0),(b x1)]
 ------------------------ (app-let)
 let [A|x0,x1] = a; (b c)
 
-let [A|x,y] = {x} f; t
+let [A|r,s] = {x} f; t
 ---------------------- (let-lam)
-p <- {x0} p
-q <- {x1} q
+r <- {x0} f0
+s <- {x1} f1
 x <- [A|x0,x1]
-let [A|x0,x1] = f; t
+let [A|f0,f1] = f; t
 
 let [A|x,y] = [B|a,b]; t
 ------------------------ (let-par)

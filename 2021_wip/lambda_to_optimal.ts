@@ -59,7 +59,7 @@ function parse(code: any): any {
   const parse_name = () : any => {
     skip_spaces();
     var nm = "";
-    while (idx < code.length && /[a-zA-Z_~]/.test(code[idx])) {
+    while (idx < code.length && /[a-zA-Z0-9_~]/.test(code[idx])) {
       nm += code[idx++];
     }
     return nm;
@@ -90,7 +90,7 @@ function parse(code: any): any {
       var name = parse_name();
       var skip = consume("=");
       var expr = parse_term();
-      var skip = consume(";");
+      //var skip = consume(";");
       var body = parse_term();
       return App(Lam(name, body), expr);
     }

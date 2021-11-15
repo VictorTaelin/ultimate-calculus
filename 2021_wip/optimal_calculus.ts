@@ -136,11 +136,11 @@ var MEM : Array<Ptr> = [];
 var GAS : number = 0;
 var LIM : number = Infinity;
 
-var MUL_A = Math.pow(2, 4);
-var MUL_B = Math.pow(2, 12);
+var COL_SIZE = Math.pow(2, 4);
+var POS_SIZE = Math.pow(2, 12);
 
-function ptr(tag: Tag, dest: number, col: Col = 0) : Ptr {
-  return tag + (col * MUL_A) + (dest * MUL_B);
+function ptr(tag: Tag, pos: number, col: Col = 0) : Ptr {
+  return tag + (col * COL_SIZE) + (pos * POS_SIZE);
 }
 
 function get_tag(ptr: Ptr) : Tag {
@@ -148,27 +148,28 @@ function get_tag(ptr: Ptr) : Tag {
 }
 
 function get_col(ptr: Ptr) : Tag {
-  return Math.floor(ptr / MUL_A) & 0xFF;
+  return Math.floor(ptr / COL_SIZE) & 0xFF;
 }
 
-function get_dest(ptr: Ptr) : number {
-  return Math.floor(ptr / MUL_B);
+function get_pos(ptr: Ptr) : number {
+  return Math.floor(ptr / POS_SIZE);
 }
 
-function SET(dest: number, term: Ptr) {
-  //if (IS_FREED[dest]) {
-    //throw new Error("Setting freed " + dest);
-  //}
-  MEM[dest] = term;
+function get_loc(ptr: Ptr, arg: number) : number {
+  return Math.floor(ptr / POS_SIZE) + arg;
+}
+
+function get_arg(term: Ptr, idx: number) : Ptr {
+  return MEM[get_loc(term,idx)];
+}
+
+function link(pos: number, term: Ptr) {
+  MEM[pos] = term;
   switch (get_tag(term)) {
-    case VAR: MEM[get_dest(term)+0] = ptr(LNK,dest); break;
-    case DP0: MEM[get_dest(term)+0] = ptr(LNK,dest); break;
-    case DP1: MEM[get_dest(term)+1] = ptr(LNK,dest); break;
+    case VAR: MEM[get_loc(term,0)] = ptr(LNK,pos); break;
+    case DP0: MEM[get_loc(term,0)] = ptr(LNK,pos); break;
+    case DP1: MEM[get_loc(term,1)] = ptr(LNK,pos); break;
   }
-}
-
-function ARG(term: Ptr, idx: number) : Ptr {
-  return MEM[get_dest(term) + idx];
 }
 
 function alloc(size: number) : number {
@@ -180,31 +181,31 @@ function alloc(size: number) : number {
     case 3: reuse = RE3.pop(); break;
   }
   if (reuse !== undefined) {
-    //console.log("reuse", size, MEM.slice(reuse, reuse + size));
-    //for (var k = 0; k < size; ++k) {
-      //MEM[reuse + k] = 0;
-    //}
     return reuse;
   } else {
-    var dest = MEM.length;
-    for (var k = 0; k < size; ++k) {
-      MEM.push(0);
+    if (size > 0) {
+      var pos = MEM.length;
+      for (var k = 0; k < size; ++k) {
+        MEM.push(0);
+      }
+      return pos;
+    } else {
+      return 0;
     }
-    return dest;
   }
 }
 
 var IS_FREED : any = {};
-function free(dest: number, size: number) {
-  for (var k = dest; k < dest + size; ++k) {
+function free(pos: number, size: number) {
+  for (var k = pos; k < pos + size; ++k) {
     IS_FREED[k] = 1;
     MEM[k] = 0;
   }
   switch (size) {
-    case 0: RE0.push(dest); break;
-    case 1: RE1.push(dest); break;
-    case 2: RE2.push(dest); break;
-    case 3: RE3.push(dest); break;
+    case 0: RE0.push(pos); break;
+    case 1: RE1.push(pos); break;
+    case 2: RE2.push(pos); break;
+    case 3: RE3.push(pos); break;
   }
 }
 
@@ -220,24 +221,24 @@ function show(term: Ptr) : string {
       seen[term] = true;
       switch (get_tag(term)) {
         case LAM:
-          if (get_tag(ARG(term,0)) !== NIL) {
-            names[ptr(VAR,get_dest(term))] = "x" + (++count);
+          if (get_tag(get_arg(term,0)) !== NIL) {
+            names[ptr(VAR,get_pos(term))] = "x" + (++count);
           }
-          name(ARG(term,1), depth + 1);
+          name(get_arg(term,1), depth + 1);
           break;
         case APP:
-          name(ARG(term,0), depth + 1);
-          name(ARG(term,1), depth + 1);
+          name(get_arg(term,0), depth + 1);
+          name(get_arg(term,1), depth + 1);
           break;
         case PAR:
-          name(ARG(term,0), depth + 1);
-          name(ARG(term,1), depth + 1);
+          name(get_arg(term,0), depth + 1);
+          name(get_arg(term,1), depth + 1);
           break;
         case DP0:
-          name(ARG(term,2), depth + 1);
+          name(get_arg(term,2), depth + 1);
           break;
         case DP1:
-          name(ARG(term,2), depth + 1);
+          name(get_arg(term,2), depth + 1);
           break;
       }
     }
@@ -252,16 +253,16 @@ function show(term: Ptr) : string {
       //if (depth > 30) return "(...)";
       switch (get_tag(term)) {
         case LAM:
-          var body = go(ARG(term,1), stacks, seen, depth + 1);
-          if (get_tag(ARG(term,0)) !== NIL) {
-            var name = names[ptr(VAR,get_dest(term))] || "?";
+          var body = go(get_arg(term,1), stacks, seen, depth + 1);
+          if (get_tag(get_arg(term,0)) !== NIL) {
+            var name = names[ptr(VAR,get_pos(term))] || "?";
           } else {
             var name = "~";
           }
           return "λ" + name + "." + body;
         case APP:
-          var func = go(ARG(term,0), stacks, seen, depth + 1);
-          var argm = go(ARG(term,1), stacks, seen, depth + 1);
+          var func = go(get_arg(term,0), stacks, seen, depth + 1);
+          var argm = go(get_arg(term,1), stacks, seen, depth + 1);
           return "(" + func + " " + argm + ")"
         case PAR:
           var col = get_col(term);
@@ -271,23 +272,23 @@ function show(term: Ptr) : string {
           //console.log("par", col);
           if (stacks[col] !== undefined && stacks[col].length > 0) {
             if (stacks[col][0] === "0") {
-              return go(ARG(term,0), {...stacks,[col]:stacks[col].slice(1)}, seen, depth + 1);
+              return go(get_arg(term,0), {...stacks,[col]:stacks[col].slice(1)}, seen, depth + 1);
             } else {
-              return go(ARG(term,1), {...stacks,[col]:stacks[col].slice(1)}, seen, depth + 1);
+              return go(get_arg(term,1), {...stacks,[col]:stacks[col].slice(1)}, seen, depth + 1);
             }
           } else {
-            var val0 = go(ARG(term,0), stacks, seen, depth + 1);
-            var val1 = go(ARG(term,1), stacks, seen, depth + 1);
+            var val0 = go(get_arg(term,0), stacks, seen, depth + 1);
+            var val1 = go(get_arg(term,1), stacks, seen, depth + 1);
             return "{" + val0 + " " + val1 + "}"
           }
         case DP0:
           var col = get_col(term);
-          return "" + go(ARG(term,2), {...stacks,[col]:"0"+stacks[col]}, seen, depth + 1);
+          return "" + go(get_arg(term,2), {...stacks,[col]:"0"+stacks[col]}, seen, depth + 1);
         case DP1:
           var col = get_col(term);
-          return "" + go(ARG(term,2), {...stacks,[col]:"1"+stacks[col]}, seen, depth + 1);
+          return "" + go(get_arg(term,2), {...stacks,[col]:"1"+stacks[col]}, seen, depth + 1);
         case VAR:
-          return names[term] || "^"+String(get_dest(term)) + "<" + show_ptr(MEM[get_dest(term)]) + ">";
+          return names[term] || "^"+String(get_pos(term)) + "<" + show_ptr(MEM[get_pos(term)]) + ">";
         case LNK:
           return "!";
         case NIL:
@@ -314,7 +315,7 @@ function show_tag(tag: Tag) {
 }
 
 function show_ptr(ptr: Ptr) {
-  return show_tag(get_tag(ptr)) + ":" + get_dest(ptr) + (get_col(ptr) !== 0 ? "|" + get_col(ptr) : "");
+  return show_tag(get_tag(ptr)) + ":" + get_pos(ptr) + (get_col(ptr) !== 0 ? "|" + get_col(ptr) : "");
 }
 
 function show_mem() {
@@ -327,70 +328,70 @@ function debug_mem() : string {
   var count : any = 0;
   for (var i = 0; i < MEM.length; ++i) {
     let tag : any = get_tag(MEM[i]);
-    let dest : any = get_dest(MEM[i]);
+    let pos : any = get_pos(MEM[i]);
     switch (tag) {
       case LAM:
-        nodes[dest] = "Lam";
-        cover[dest+0] = 1;
-        cover[dest+1] = 1;
+        nodes[pos] = "Lam";
+        cover[pos+0] = 1;
+        cover[pos+1] = 1;
         break;
       case APP:
-        nodes[dest] = "App";
-        cover[dest+0] = 1;
-        cover[dest+1] = 1;
+        nodes[pos] = "App";
+        cover[pos+0] = 1;
+        cover[pos+1] = 1;
         break;
       case PAR:
-        nodes[dest] = "Par";
-        cover[dest+0] = 1;
-        cover[dest+1] = 1;
+        nodes[pos] = "Par";
+        cover[pos+0] = 1;
+        cover[pos+1] = 1;
         break;
       case DP0:
-        nodes[dest] = "Let";
-        cover[dest+0] = 1;
-        cover[dest+1] = 1;
-        cover[dest+2] = 1;
+        nodes[pos] = "Let";
+        cover[pos+0] = 1;
+        cover[pos+1] = 1;
+        cover[pos+2] = 1;
         break;
       case DP1:
-        nodes[dest] = "Let";
-        cover[dest+0] = 1;
-        cover[dest+1] = 1;
-        cover[dest+2] = 1;
+        nodes[pos] = "Let";
+        cover[pos+0] = 1;
+        cover[pos+1] = 1;
+        cover[pos+2] = 1;
         break;
     }
   }
   function show_down(ptr : any) {
     switch (get_tag(ptr)) {
-      case DP0: return pad("a" + get_dest(ptr),4);
-      case DP1: return pad("b" + get_dest(ptr),4);
-      case VAR: return pad("x" + get_dest(ptr),4);
-      default: return pad("" + get_dest(ptr), 4);
+      case DP0: return pad("a" + get_pos(ptr),4);
+      case DP1: return pad("b" + get_pos(ptr),4);
+      case VAR: return pad("x" + get_pos(ptr),4);
+      default: return pad("" + get_pos(ptr), 4);
     }
   }
   function show_link(ptr : any) {
     if (get_tag(ptr) === NIL) {
       return pad("~", 4)
     } else {
-      return pad(String(get_dest(ptr)), 4);
+      return pad(String(get_pos(ptr)), 4);
     }
   }
   var text = "";
-  for (var dest = 0; dest < MEM.length; ++dest) {
-    var loc = pad(String(dest), 3);
-    if (!cover[dest] && MEM[dest]) {
-      text += loc + " ? " + pad(show_ptr(MEM[dest]),9) + "\n";
+  for (var pos = 0; pos < MEM.length; ++pos) {
+    var loc = pad(String(pos), 3);
+    if (!cover[pos] && MEM[pos]) {
+      text += loc + " ? " + pad(show_ptr(MEM[pos]),9) + "\n";
     } else {
-      switch (nodes[dest] || 0) {
+      switch (nodes[pos] || 0) {
         case "Lam":
-          text += loc + " λ " + show_link(MEM[dest+0]) + " " + show_down(MEM[dest+1]) + "\n";
+          text += loc + " λ " + show_link(MEM[pos+0]) + " " + show_down(MEM[pos+1]) + "\n";
           break;
         case "App":
-          text += loc + " @ " + show_down(MEM[dest+0]) + " " + show_down(MEM[dest+1]) + "\n";
+          text += loc + " @ " + show_down(MEM[pos+0]) + " " + show_down(MEM[pos+1]) + "\n";
           break;
         case "Par":
-          text += loc + " & " + show_down(MEM[dest+0]) + " " + show_down(MEM[dest+1]) + "\n";
+          text += loc + " & " + show_down(MEM[pos+0]) + " " + show_down(MEM[pos+1]) + "\n";
           break;
         case "Let":
-          text += loc + " $ " + show_down(MEM[dest+2]) + "\n";
+          text += loc + " $ " + show_down(MEM[pos+2]) + "\n";
           break;
       }
     }
@@ -410,23 +411,23 @@ function read(code: string): Ptr {
   var tag1s : MAP<number> = {};
   var vars  : Array<[string,number]> = [];
 
-  function link() {
-    for (var [var_name, var_dest] of vars) {
+  function build() {
+    for (var [var_name, var_pos] of vars) {
       //console.log("link", name);
       var lam = lams[var_name]
       if (lam !== undefined) {
         //console.log("- lam");
-        SET(var_dest, ptr(VAR,lam));
+        link(var_pos, ptr(VAR,lam));
       }
       var let0 = let0s[var_name]
       if (let0 !== undefined) {
         //console.log("- let0");
-        SET(var_dest, ptr(DP0,let0,tag0s[var_name]||0));
+        link(var_pos, ptr(DP0,let0,tag0s[var_name]||0));
       }
       var let1 = let1s[var_name]
       if (let1 !== undefined) {
         //console.log("- let1");
-        SET(var_dest, ptr(DP1,let1,tag1s[var_name]||0));
+        link(var_pos, ptr(DP1,let1,tag1s[var_name]||0));
       }
     }
   }
@@ -461,8 +462,8 @@ function read(code: string): Ptr {
         var name = parse_name();
         code = code.slice(1);
         var body = parse_term(node + 1);
-        SET(node+0, ptr(NIL,0));
-        SET(node+1, body);
+        link(node+0, ptr(NIL,0));
+        link(node+1, body);
         lams[name] = node;
         return ptr(LAM, node);
       case "(":
@@ -470,8 +471,8 @@ function read(code: string): Ptr {
         node = alloc(2);
         var func = parse_term(node + 0);
         var argm = parse_term(node + 1);
-        SET(node+0, func);
-        SET(node+1, argm);
+        link(node+0, func);
+        link(node+1, argm);
         skip();
         code = code.slice(1);
         return ptr(APP, node);
@@ -490,8 +491,8 @@ function read(code: string): Ptr {
         node = alloc(2);
         var val0 = parse_term(node + 0);
         var val1 = parse_term(node + 1);
-        SET(node+0, val0);
-        SET(node+1, val1);
+        link(node+0, val0);
+        link(node+1, val1);
         skip();
         code = code.slice(1);
         return ptr(PAR, node, col);
@@ -516,9 +517,9 @@ function read(code: string): Ptr {
         skip();
         code = code.slice(1);
         var body = parse_term(local);
-        SET(node+0, ptr(NIL,0));
-        SET(node+1, ptr(NIL,0));
-        SET(node+2, expr);
+        link(node+0, ptr(NIL,0));
+        link(node+1, ptr(NIL,0));
+        link(node+2, expr);
         let0s[nam0] = node;
         tag0s[nam0] = col;
         let1s[nam1] = node;
@@ -532,8 +533,8 @@ function read(code: string): Ptr {
     }
   }
   MEM = [ptr(NIL,0)];
-  SET(0, parse_term(0));
-  link();
+  link(0, parse_term(0));
+  build();
   //PARSING = false;
   return MEM[0];
 }
@@ -543,31 +544,31 @@ function read(code: string): Ptr {
 
 function sanity_check() {
   for (var i = 0; i < MEM.length; ++i) {
-    //if (MEM[i] !== 0 && MEM[get_dest(MEM[i])] === 0) {
+    //if (MEM[i] !== 0 && MEM[get_pos(MEM[i])] === 0) {
       //throw new Error("Pointing to void at " + i + ".");
     //}
     switch (get_tag(MEM[i])) {
       case VAR:
-        if (get_dest(MEM[get_dest(MEM[i])]) !== i) {
+        if (get_loc(MEM[get_loc(MEM[i],0)],0) !== i) {
           throw new Error("Bad var at " + i + ".");
         }
         break;
       case DP0:
-        if (get_dest(MEM[get_dest(MEM[i])]) !== i) {
+        if (get_loc(MEM[get_loc(MEM[i],0)],0) !== i) {
           throw new Error("Bad dp0 at " + i + ".");
         }
         break;
       case DP1:
-        if (get_dest(MEM[get_dest(MEM[i])+1]) !== i) {
+        if (get_loc(MEM[get_loc(MEM[i],1)],0) !== i) {
           throw new Error("Bad dp1 at " + i + ".");
         }
         break;
       case LAM:
-        if (MEM[get_dest(MEM[i])+1] === 0) {
+        if (MEM[get_loc(MEM[i],1)] === 0) {
           throw new Error("Lambda pointing to nil body at " + i + ".");
         }
       //case PAR:
-        //if (ARG(MEM[i],0) === MEM[i] || ARG(MEM[i],1) === MEM[i]) {
+        //if (get_arg(MEM[i],0) === MEM[i] || get_arg(MEM[i],1) === MEM[i]) {
           //throw new Error("Self-referential pair at " + i + ".");
         //}
     }
@@ -587,40 +588,40 @@ function sanity_check() {
 function collect(term: Ptr, host: null | number) {
   switch (get_tag(term)) {
     case LAM:
-      if (get_tag(ARG(term,0)) !== NIL) {
-        SET(get_dest(ARG(term,0)), ptr(NIL,0));
+      if (get_tag(get_arg(term,0)) !== NIL) {
+        link(get_loc(get_arg(term,0),0), ptr(NIL,0));
       }
-      collect(ARG(term,1), get_dest(term) + 1);
-      free(get_dest(term), 2);
+      collect(get_arg(term,1), get_loc(term,1));
+      free(get_loc(term,0), 2);
       break;
     case APP:
-      collect(ARG(term,0), get_dest(term) + 0);
-      collect(ARG(term,1), get_dest(term) + 1);
-      free(get_dest(term), 2);
+      collect(get_arg(term,0), get_loc(term,0));
+      collect(get_arg(term,1), get_loc(term,1));
+      free(get_loc(term,0), 2);
       break;
     case PAR:
       //console.log("par");
-      collect(ARG(term,0), get_dest(term) + 0);
-      collect(ARG(term,1), get_dest(term) + 1);
-      free(get_dest(term), 2);
+      collect(get_arg(term,0), get_loc(term,0));
+      collect(get_arg(term,1), get_loc(term,1));
+      free(get_loc(term,0), 2);
       if (host) {
-        SET(host, ptr(NIL,0));
+        link(host, ptr(NIL,0));
       }
       break;
     case DP0:
-      SET(get_dest(term) + 0, ptr(NIL,0));
+      link(get_loc(term,0), ptr(NIL,0));
       if (host) {
         free(host, 1);
       }
       break;
     case DP1:
-      SET(get_dest(term) + 1, ptr(NIL,0));
+      link(get_loc(term,1), ptr(NIL,0));
       if (host) {
         free(host, 1);
       }
       break;
     case VAR:
-      SET(get_dest(term) + 0, ptr(NIL,0));
+      link(get_loc(term,0), ptr(NIL,0));
       if (host) {
         free(host, 1);
       }
@@ -633,7 +634,7 @@ function collect(term: Ptr, host: null | number) {
 
 function subst(lnk: Ptr, val: Ptr) {
   if (get_tag(lnk) !== NIL) {
-    SET(get_dest(lnk), val);
+    link(get_loc(lnk,0), val);
   } else {
     // Attempting to GC here is futile. See note above.
     collect(val, null);
@@ -641,12 +642,13 @@ function subst(lnk: Ptr, val: Ptr) {
 }
 
 var depth = 0;
-function reduce(term: Ptr, host: number, depth: number) : Ptr {
+function reduce(host: number) : Ptr {
+  var term = MEM[host];
   //console.log("REDUCE", depth, show_ptr(term));
   //console.log(view_mem());
   switch (get_tag(term)) {
     case APP:
-      let func = reduce(ARG(term, 0), get_dest(term) + 0, depth + 1);
+      let func = reduce(get_loc(term,0));
       switch (get_tag(func)) {
         // (λx.b a)
         // --------- APP-LAM
@@ -657,16 +659,16 @@ function reduce(term: Ptr, host: number, depth: number) : Ptr {
           } else {
             ++GAS;
           }
-          //console.log("[app-lam]", get_dest(term), get_dest(func));
+          //console.log("[app-lam]", get_pos(term), get_pos(func));
           //sanity_check();
-          subst(ARG(func,0), ARG(term,1));
-          var done = ARG(func, 1);
-          free(get_dest(term), 2);
-          free(get_dest(func), 2);
-          SET(host, done);
+          subst(get_arg(func,0), get_arg(term,1));
+          //var done = get_arg(func, 1);
+          link(host, get_arg(func, 1));
+          free(get_loc(term,0), 2);
+          free(get_loc(func,0), 2);
           //sanity_check();
-          return reduce(done, host, depth + 1);
-          //return ARG(func, 1);
+          return reduce(host);
+          //return get_arg(func, 1);
         }
         // ({A a b} c)
         // ----------------- APP-PAR
@@ -678,31 +680,30 @@ function reduce(term: Ptr, host: number, depth: number) : Ptr {
           } else {
             ++GAS;
           }
-          //console.log("[app-par]", get_dest(term), get_dest(func));
+          //console.log("[app-par]", get_pos(term), get_pos(func));
           //sanity_check();
           var let0 = alloc(3);
           var app0 = alloc(2);
           var app1 = alloc(2);
           var par0 = alloc(2);
-          SET(let0+2, ARG(term, 1));
-          SET(app0+0, ARG(func, 0));
-          SET(app0+1, ptr(DP0, let0, get_col(func)));
-          SET(app1+0, ARG(func, 1));
-          SET(app1+1, ptr(DP1, let0, get_col(func)));
-          SET(par0+0, ptr(APP, app0));
-          SET(par0+1, ptr(APP, app1));
-          var done = ptr(PAR, par0, get_col(func));
-          free(get_dest(term), 2);
-          free(get_dest(func), 2);
-          SET(host, done);
+          link(let0+2, get_arg(term, 1));
+          link(app0+0, get_arg(func, 0));
+          link(app0+1, ptr(DP0, let0, get_col(func)));
+          link(app1+0, get_arg(func, 1));
+          link(app1+1, ptr(DP1, let0, get_col(func)));
+          link(par0+0, ptr(APP, app0));
+          link(par0+1, ptr(APP, app1));
+          link(host, ptr(PAR, par0, get_col(func)));
+          free(get_loc(term,0), 2);
+          free(get_loc(func,0), 2);
           //sanity_check();
-          return done;
+          return MEM[host];
         }
       }
       break;
     case DP0:
     case DP1:
-      let expr = reduce(ARG(term, 2), get_dest(term) + 2, depth + 1);
+      let expr = reduce(get_loc(term,2));
       switch (get_tag(expr)) {
         // let {A r s} = λx. f
         // ------------------- LET-LAM
@@ -717,27 +718,26 @@ function reduce(term: Ptr, host: number, depth: number) : Ptr {
           } else {
             ++GAS;
           }
-          //console.log("[let-lam]", get_dest(term), get_dest(expr));
+          //console.log("[let-lam]", get_pos(term), get_pos(expr));
           //sanity_check();
           var lam0 = alloc(2);
           var lam1 = alloc(2);
           var par0 = alloc(2);
           var let0 = alloc(3);
-          SET(lam0+1, ptr(DP0, let0, get_col(term)));
-          SET(lam1+1, ptr(DP1, let0, get_col(term)));
-          SET(par0+0, ptr(VAR, lam0));
-          SET(par0+1, ptr(VAR, lam1));
-          SET(let0+2, ARG(expr, 1));
-          subst(ARG(term,0), ptr(LAM, lam0));
-          subst(ARG(term,1), ptr(LAM, lam1));
+          link(lam0+1, ptr(DP0, let0, get_col(term)));
+          link(lam1+1, ptr(DP1, let0, get_col(term)));
+          link(par0+0, ptr(VAR, lam0));
+          link(par0+1, ptr(VAR, lam1));
+          link(let0+2, get_arg(expr, 1));
+          subst(get_arg(term,0), ptr(LAM, lam0));
+          subst(get_arg(term,1), ptr(LAM, lam1));
           //console.log(debug_mem());
-          subst(ARG(expr,0), ptr(PAR, par0, get_col(term)));
-          var done = get_tag(term) === DP0 ? ptr(LAM,lam0) : ptr(LAM,lam1);
-          free(get_dest(term), 3);
-          free(get_dest(expr), 2);
-          SET(host, done);
+          subst(get_arg(expr,0), ptr(PAR, par0, get_col(term)));
+          link(host, ptr(LAM, get_tag(term) === DP0 ? lam0 : lam1));
+          free(get_loc(term,0), 3);
+          free(get_loc(expr,0), 2);
           //sanity_check();
-          return reduce(done, host, depth + 1);
+          return reduce(host);
         }
         // let {A x y} = {B a b}
         // --------------------- LET-PAR
@@ -757,37 +757,35 @@ function reduce(term: Ptr, host: number, depth: number) : Ptr {
           } else {
             ++GAS;
           }
-          //console.log("[let-par]", get_dest(term), get_dest(expr));
+          //console.log("[let-par]", get_pos(term), get_pos(expr));
           if (get_col(term) === get_col(expr)) {
             //sanity_check();
-            subst(ARG(term,0), ARG(expr,0));
-            subst(ARG(term,1), ARG(expr,1));
-            var done = get_tag(term) === DP0 ? ARG(expr,0) : ARG(expr,1);
-            free(get_dest(term), 3);
-            free(get_dest(expr), 2);
-            SET(host, done);
+            subst(get_arg(term,0), get_arg(expr,0));
+            subst(get_arg(term,1), get_arg(expr,1));
+            link(host, get_arg(expr, get_tag(term) === DP0 ? 0 : 1));
+            free(get_loc(term,0), 3);
+            free(get_loc(expr,0), 2);
             //sanity_check();
-            return reduce(done, host, depth + 1);
+            return reduce(host);
           } else {
             //sanity_check();
             var par0 = alloc(2);
             var par1 = alloc(2);
             var let0 = alloc(3);
             var let1 = alloc(3);
-            SET(par0+0, ptr(DP0,let0,get_col(term)));
-            SET(par0+1, ptr(DP0,let1,get_col(term)));
-            SET(par1+0, ptr(DP1,let0,get_col(term)));
-            SET(par1+1, ptr(DP1,let1,get_col(term)));
-            SET(let0+2, ARG(expr,0));
-            SET(let1+2, ARG(expr,1));
-            subst(ARG(term,0), ptr(PAR,par0,get_col(expr)));
-            subst(ARG(term,1), ptr(PAR,par1,get_col(expr)));
-            var done = get_tag(term) === DP0 ? ptr(PAR,par0,get_col(expr)) : ptr(PAR,par1,get_col(expr));
-            free(get_dest(term), 3);
-            free(get_dest(expr), 2);
-            SET(host, done);
+            link(par0+0, ptr(DP0,let0,get_col(term)));
+            link(par0+1, ptr(DP0,let1,get_col(term)));
+            link(par1+0, ptr(DP1,let0,get_col(term)));
+            link(par1+1, ptr(DP1,let1,get_col(term)));
+            link(let0+2, get_arg(expr,0));
+            link(let1+2, get_arg(expr,1));
+            subst(get_arg(term,0), ptr(PAR,par0,get_col(expr)));
+            subst(get_arg(term,1), ptr(PAR,par1,get_col(expr)));
+            link(host, ptr(PAR, get_tag(term) === DP0 ? par0 : par1, get_col(expr)));
+            free(get_loc(term,0), 3);
+            free(get_loc(expr,0), 2);
             //sanity_check();
-            return done;
+            return MEM[host];
           }
         }
       }
@@ -796,39 +794,40 @@ function reduce(term: Ptr, host: number, depth: number) : Ptr {
   return term;
 }
 
-function normal(term: Ptr, host: number) : Ptr {
+function normal(host: number) : Ptr {
   var seen : MAP<boolean> = {};
-  function go(term: Ptr, host: number) : Ptr {
+  function go(host: number) : Ptr {
+    var term = MEM[host];
     //console.log("normal", show(term));
-    if (seen[get_dest(term)]) {
+    if (seen[get_loc(term,0)]) {
       return term;
     } else {
-      term = reduce(term, host, 0);
-      seen[get_dest(term)] = true;
+      term = reduce(host);
+      seen[get_loc(term,0)] = true;
       switch (get_tag(term)) {
         case LAM:
-          SET(get_dest(term) + 1, go(MEM[get_dest(term) + 1], get_dest(term) + 1));
+          link(get_loc(term,1), go(get_loc(term,1)));
           return term;
         case APP:
-          SET(get_dest(term) + 0, go(MEM[get_dest(term) + 0], get_dest(term) + 0));
-          SET(get_dest(term) + 1, go(MEM[get_dest(term) + 1], get_dest(term) + 1));
+          link(get_loc(term,0), go(get_loc(term,0)));
+          link(get_loc(term,1), go(get_loc(term,1)));
           return term;
         case PAR:
-          SET(get_dest(term) + 0, go(MEM[get_dest(term) + 0], get_dest(term) + 0));
-          SET(get_dest(term) + 1, go(MEM[get_dest(term) + 1], get_dest(term) + 1));
+          link(get_loc(term,0), go(get_loc(term,0)));
+          link(get_loc(term,1), go(get_loc(term,1)));
           return term;
         case DP0:
-          SET(get_dest(term) + 2, go(MEM[get_dest(term) + 2], get_dest(term) + 2));
+          link(get_loc(term,2), go(get_loc(term,2)));
           return term;
         case DP1:
-          SET(get_dest(term) + 2, go(MEM[get_dest(term) + 2], get_dest(term) + 2));
+          link(get_loc(term,2), go(get_loc(term,2)));
           return term;
         default:
           return term;
       }
     }
   }
-  return go(term, host);
+  return go(host);
 }
 
 // Tests
@@ -850,7 +849,6 @@ var code : string = `
   let slow   = (Y λslow. λn. (n true λpred.(nand (slow pred) (slow pred))))
 
   (slow
-    (succ (succ
     (succ (succ (succ (succ
     (succ (succ (succ (succ
     (succ (succ (succ (succ
@@ -860,7 +858,6 @@ var code : string = `
     ))))
     ))))
     ))))
-    ))
   )
 `;
 
@@ -868,7 +865,7 @@ var code : string = lambda_to_optimal(code);
 
 var term = read(code);
 
-var norm = normal(MEM[0],0);
+var norm = normal(0);
 console.log("cost: " + String(GAS));
 console.log("norm: " + show(MEM[0]));
 

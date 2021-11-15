@@ -243,7 +243,7 @@ function show(term: any): any {
       var nam1 = term.nam1;
       var expr = show(term.expr);
       var body = show(term.body);
-      return "! <" + kind + " " + nam0 + " " + nam1 + "> = " + expr + "; " + body;
+      return "!" + kind + "<" + nam0 + " " + nam1 + "> = " + expr + "; " + body;
   }
 }
 

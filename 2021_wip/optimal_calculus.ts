@@ -750,169 +750,171 @@ function subst(lnk: Ptr, val: Ptr) {
 
 var depth = 0;
 function reduce(host: number) : Ptr {
-  var term = MEM[host];
-  //console.log("REDUCE", depth, show_ptr(term));
-  switch (get_tag(term)) {
-    case APP:
-      let func = reduce(get_loc(term,0));
-      switch (get_tag(func)) {
-        // (λx:b a)
-        // --------- APP-LAM
-        // x <- a
-        case LAM: {
-          if (GAS >= LIM) { return term; } else { ++GAS; }
-          //console.log("[app-lam]", get_pos(term), get_pos(func));
-          //sanity_check();
-          subst(get_arg(func,0), get_arg(term,1));
-          link(host, get_arg(func, 1));
-          free(get_loc(term,0), 2);
-          free(get_loc(func,0), 2);
-          //console.log(show_term(MEM[0]));
-          return reduce(host);
-        }
-        // (&A<a b> c)
-        // ----------------- APP-PAR
-        // !A<x0 x1> = c
-        // &A<(a x0) (b x1)>
-        case PAR: {
-          if (GAS >= LIM) { return term; } else { ++GAS; }
-          //console.log("[app-par]", get_pos(term), get_pos(func));
-          //sanity_check();
-          var let0 = alloc(3);
-          var app0 = alloc(2);
-          var app1 = alloc(2);
-          var par0 = alloc(2);
-          link(let0+2, get_arg(term, 1));
-          link(app0+0, get_arg(func, 0));
-          link(app0+1, ptr(DP0, let0, get_ex0(func)));
-          link(app1+0, get_arg(func, 1));
-          link(app1+1, ptr(DP1, let0, get_ex0(func)));
-          link(par0+0, ptr(APP, app0));
-          link(par0+1, ptr(APP, app1));
-          link(host, ptr(PAR, par0, get_ex0(func)));
-          free(get_loc(term,0), 2);
-          free(get_loc(func,0), 2);
-          //sanity_check();
-          //console.log(show_term(MEM[0]));
-          return MEM[host];
-        }
-      }
-      break;
-    case DP0:
-    case DP1:
-      let expr = reduce(get_loc(term,2));
-      switch (get_tag(expr)) {
-        // !A<r s> = λx: f
-        // --------------- LET-LAM
-        // r <- λx0: f0
-        // s <- λx1: f1
-        // x <- &A<x0 x1>
-        // !A<f0 f1> = f
-        // ~
-        case LAM: {
-          if (GAS >= LIM) { return term; } else { ++GAS; }
-          //console.log("[let-lam]", get_pos(term), get_pos(expr));
-          //sanity_check();
-          var lam0 = alloc(2);
-          var lam1 = alloc(2);
-          var par0 = alloc(2);
-          var let0 = alloc(3);
-          link(lam0+1, ptr(DP0, let0, get_ex0(term)));
-          link(lam1+1, ptr(DP1, let0, get_ex0(term)));
-          link(par0+0, ptr(VAR, lam0));
-          link(par0+1, ptr(VAR, lam1));
-          link(let0+2, get_arg(expr, 1));
-          subst(get_arg(term,0), ptr(LAM, lam0));
-          subst(get_arg(term,1), ptr(LAM, lam1));
-          subst(get_arg(expr,0), ptr(PAR, par0, get_ex0(term)));
-          link(host, ptr(LAM, get_tag(term) === DP0 ? lam0 : lam1));
-          free(get_loc(term,0), 3);
-          free(get_loc(expr,0), 2);
-          //sanity_check();
-          //console.log(show_term(MEM[0]));
-          return reduce(host);
-        }
-        // !A<x y> = !B<a b>
-        // ----------------- LET-PAR
-        // if A == B then
-        //   x <- a
-        //   y <- b
-        //   ~
-        // else
-        //   x <- !B<xA xB>
-        //   y <- !B<yA yB>
-        //   !A<xA yA> = a
-        //   !A<xB yB> = b
-        //   ~
-        case PAR: {
-          if (GAS >= LIM) { return term; } else { ++GAS; }
-          //console.log("[let-par]", get_pos(term), get_pos(expr));
-          if (get_ex0(term) === get_ex0(expr)) {
+  while (true) {
+    var term = MEM[host];
+    //console.log("REDUCE", depth, show_ptr(term));
+    switch (get_tag(term)) {
+      case APP:
+        let func = reduce(get_loc(term,0));
+        switch (get_tag(func)) {
+          // (λx:b a)
+          // --------- APP-LAM
+          // x <- a
+          case LAM: {
+            if (GAS >= LIM) { return term; } else { ++GAS; }
+            //console.log("[app-lam]", get_pos(term), get_pos(func));
             //sanity_check();
-            subst(get_arg(term,0), get_arg(expr,0));
-            subst(get_arg(term,1), get_arg(expr,1));
-            link(host, get_arg(expr, get_tag(term) === DP0 ? 0 : 1));
-            free(get_loc(term,0), 3);
-            free(get_loc(expr,0), 2);
-            //sanity_check();
+            subst(get_arg(func,0), get_arg(term,1));
+            link(host, get_arg(func, 1));
+            free(get_loc(term,0), 2);
+            free(get_loc(func,0), 2);
             //console.log(show_term(MEM[0]));
-            return reduce(host);
-          } else {
+            continue;
+          }
+          // (&A<a b> c)
+          // ----------------- APP-PAR
+          // !A<x0 x1> = c
+          // &A<(a x0) (b x1)>
+          case PAR: {
+            if (GAS >= LIM) { return term; } else { ++GAS; }
+            //console.log("[app-par]", get_pos(term), get_pos(func));
             //sanity_check();
-            var par0 = alloc(2);
-            var par1 = alloc(2);
             var let0 = alloc(3);
-            var let1 = alloc(3);
-            link(par0+0, ptr(DP0,let0,get_ex0(term)));
-            link(par0+1, ptr(DP0,let1,get_ex0(term)));
-            link(par1+0, ptr(DP1,let0,get_ex0(term)));
-            link(par1+1, ptr(DP1,let1,get_ex0(term)));
-            link(let0+2, get_arg(expr,0));
-            link(let1+2, get_arg(expr,1));
-            subst(get_arg(term,0), ptr(PAR,par0,get_ex0(expr)));
-            subst(get_arg(term,1), ptr(PAR,par1,get_ex0(expr)));
-            link(host, ptr(PAR, get_tag(term) === DP0 ? par0 : par1, get_ex0(expr)));
-            free(get_loc(term,0), 3);
-            free(get_loc(expr,0), 2);
+            var app0 = alloc(2);
+            var app1 = alloc(2);
+            var par0 = alloc(2);
+            link(let0+2, get_arg(term, 1));
+            link(app0+0, get_arg(func, 0));
+            link(app0+1, ptr(DP0, let0, get_ex0(func)));
+            link(app1+0, get_arg(func, 1));
+            link(app1+1, ptr(DP1, let0, get_ex0(func)));
+            link(par0+0, ptr(APP, app0));
+            link(par0+1, ptr(APP, app1));
+            link(host, ptr(PAR, par0, get_ex0(func)));
+            free(get_loc(term,0), 2);
+            free(get_loc(func,0), 2);
             //sanity_check();
             //console.log(show_term(MEM[0]));
             return MEM[host];
           }
         }
-        // !A<x y> = $V:L{a b c ...}
-        // -------------------------
-        // !A<a0 a1> = a
-        // !A<b0 b1> = b
-        // !A<c0 c1> = c
-        // ...
-        // x <- $V:L{a0 b0 c0 ...}
-        // y <- $V:L{a1 b1 c1 ...}
-        // ~
-        case CTR: {
-          if (GAS >= LIM) { return term; } else { ++GAS; }
-          //console.log("[let-ctr]", get_pos(term), get_pos(expr));
-          let arit = get_ex0(expr);
-          let func = get_ex1(expr);
-          let ctr0 = alloc(arit);
-          let ctr1 = alloc(arit);
-          for (let i = 0; i < arit; ++i) {
-            let leti = alloc(3);
-            link(ctr0+i, ptr(DP0, leti));
-            link(ctr1+i, ptr(DP1, leti));
-            link(leti+2, get_arg(expr,i));
+        break;
+      case DP0:
+      case DP1:
+        let expr = reduce(get_loc(term,2));
+        switch (get_tag(expr)) {
+          // !A<r s> = λx: f
+          // --------------- LET-LAM
+          // r <- λx0: f0
+          // s <- λx1: f1
+          // x <- &A<x0 x1>
+          // !A<f0 f1> = f
+          // ~
+          case LAM: {
+            if (GAS >= LIM) { return term; } else { ++GAS; }
+            //console.log("[let-lam]", get_pos(term), get_pos(expr));
+            //sanity_check();
+            var lam0 = alloc(2);
+            var lam1 = alloc(2);
+            var par0 = alloc(2);
+            var let0 = alloc(3);
+            link(lam0+1, ptr(DP0, let0, get_ex0(term)));
+            link(lam1+1, ptr(DP1, let0, get_ex0(term)));
+            link(par0+0, ptr(VAR, lam0));
+            link(par0+1, ptr(VAR, lam1));
+            link(let0+2, get_arg(expr, 1));
+            subst(get_arg(term,0), ptr(LAM, lam0));
+            subst(get_arg(term,1), ptr(LAM, lam1));
+            subst(get_arg(expr,0), ptr(PAR, par0, get_ex0(term)));
+            link(host, ptr(LAM, get_tag(term) === DP0 ? lam0 : lam1));
+            free(get_loc(term,0), 3);
+            free(get_loc(expr,0), 2);
+            //sanity_check();
+            //console.log(show_term(MEM[0]));
+            continue;
           }
-          subst(get_arg(term,0), ptr(CTR, ctr0, arit, func));
-          subst(get_arg(term,1), ptr(CTR, ctr1, arit, func));
-          link(host, ptr(CTR, get_tag(term) === DP0 ? ctr0 : ctr1, arit, func));
-          free(get_loc(term,0), 3);
-          free(get_loc(expr,0), arit);
-          //console.log(show_term(MEM[0]));
-          return MEM[host];
+          // !A<x y> = !B<a b>
+          // ----------------- LET-PAR
+          // if A == B then
+          //   x <- a
+          //   y <- b
+          //   ~
+          // else
+          //   x <- !B<xA xB>
+          //   y <- !B<yA yB>
+          //   !A<xA yA> = a
+          //   !A<xB yB> = b
+          //   ~
+          case PAR: {
+            if (GAS >= LIM) { return term; } else { ++GAS; }
+            //console.log("[let-par]", get_pos(term), get_pos(expr));
+            if (get_ex0(term) === get_ex0(expr)) {
+              //sanity_check();
+              subst(get_arg(term,0), get_arg(expr,0));
+              subst(get_arg(term,1), get_arg(expr,1));
+              link(host, get_arg(expr, get_tag(term) === DP0 ? 0 : 1));
+              free(get_loc(term,0), 3);
+              free(get_loc(expr,0), 2);
+              //sanity_check();
+              //console.log(show_term(MEM[0]));
+              continue;
+            } else {
+              //sanity_check();
+              var par0 = alloc(2);
+              var par1 = alloc(2);
+              var let0 = alloc(3);
+              var let1 = alloc(3);
+              link(par0+0, ptr(DP0,let0,get_ex0(term)));
+              link(par0+1, ptr(DP0,let1,get_ex0(term)));
+              link(par1+0, ptr(DP1,let0,get_ex0(term)));
+              link(par1+1, ptr(DP1,let1,get_ex0(term)));
+              link(let0+2, get_arg(expr,0));
+              link(let1+2, get_arg(expr,1));
+              subst(get_arg(term,0), ptr(PAR,par0,get_ex0(expr)));
+              subst(get_arg(term,1), ptr(PAR,par1,get_ex0(expr)));
+              link(host, ptr(PAR, get_tag(term) === DP0 ? par0 : par1, get_ex0(expr)));
+              free(get_loc(term,0), 3);
+              free(get_loc(expr,0), 2);
+              //sanity_check();
+              //console.log(show_term(MEM[0]));
+              return MEM[host];
+            }
+          }
+          // !A<x y> = $V:L{a b c ...}
+          // -------------------------
+          // !A<a0 a1> = a
+          // !A<b0 b1> = b
+          // !A<c0 c1> = c
+          // ...
+          // x <- $V:L{a0 b0 c0 ...}
+          // y <- $V:L{a1 b1 c1 ...}
+          // ~
+          case CTR: {
+            if (GAS >= LIM) { return term; } else { ++GAS; }
+            //console.log("[let-ctr]", get_pos(term), get_pos(expr));
+            let arit = get_ex0(expr);
+            let func = get_ex1(expr);
+            let ctr0 = alloc(arit);
+            let ctr1 = alloc(arit);
+            for (let i = 0; i < arit; ++i) {
+              let leti = alloc(3);
+              link(ctr0+i, ptr(DP0, leti));
+              link(ctr1+i, ptr(DP1, leti));
+              link(leti+2, get_arg(expr,i));
+            }
+            subst(get_arg(term,0), ptr(CTR, ctr0, arit, func));
+            subst(get_arg(term,1), ptr(CTR, ctr1, arit, func));
+            link(host, ptr(CTR, get_tag(term) === DP0 ? ctr0 : ctr1, arit, func));
+            free(get_loc(term,0), 3);
+            free(get_loc(expr,0), arit);
+            //console.log(show_term(MEM[0]));
+            return MEM[host];
+          }
         }
-      }
-      break;
+        break;
+    }
+    return term;
   }
-  return term;
 }
 
 function normal(host: number) : Ptr {
@@ -989,10 +991,10 @@ var code : string = `
   )
 `;
 
-var code : string = `
-  let a = $0{λx:x λx:x}
-  λt: (t a a)
-`;
+//var code : string = `
+  //let a = $0{λx:x λx:x}
+  //λt: (t a a)
+//`;
   
 var code : string = lambda_to_optimal(code);
 //console.log(code);

@@ -106,13 +106,18 @@ const NIL : number = 0
 const LAM : number = 1
 const APP : number = 2
 const PAR : number = 3
-const DP0 : number = 4
-const DP1 : number = 5
+const DP0 : number = 4 // ex0 = color
+const DP1 : number = 5 // ex0 = color
 const VAR : number = 6
 const LNK : number = 7
+const CTR : number = 8 // ex0 = arity, ex1 = variant
+const CAL : number = 9 // ex0 = arity, ex1 = function
 
-type Col = number
-type Tag = number
+type Tag = number // 4 bits
+type Ex0 = number // 8 bits
+type Ex1 = number // 8 bits
+type Pos = number // 32 bits
+
 type Ptr = number
 
 // Utils
@@ -136,27 +141,32 @@ var MEM : Array<Ptr> = [];
 var GAS : number = 0;
 var LIM : number = Infinity;
 
-var COL_SIZE = Math.pow(2, 4);
-var POS_SIZE = Math.pow(2, 12);
+var MUL_A = Math.pow(2, 4);
+var MUL_B = Math.pow(2, 12);
+var MUL_C = Math.pow(2, 20);
 
-function ptr(tag: Tag, pos: number, col: Col = 0) : Ptr {
-  return tag + (col * COL_SIZE) + (pos * POS_SIZE);
+function ptr(tag: Tag, pos: number, ex0: Ex0 = 0, ex1: Ex1 = 0) : Ptr {
+  return tag + (ex0 * MUL_A) + (ex1 * MUL_B) + (pos * MUL_C);
 }
 
 function get_tag(ptr: Ptr) : Tag {
   return ptr & 0xF;
 }
 
-function get_col(ptr: Ptr) : Tag {
-  return Math.floor(ptr / COL_SIZE) & 0xFF;
+function get_ex0(ptr: Ptr) : Ex0 {
+  return Math.floor(ptr / MUL_A) & 0xFF;
+}
+
+function get_ex1(ptr: Ptr) : Ex1 {
+  return Math.floor(ptr / MUL_B) & 0xFF;
 }
 
 function get_pos(ptr: Ptr) : number {
-  return Math.floor(ptr / POS_SIZE);
+  return Math.floor(ptr / MUL_C);
 }
 
 function get_loc(ptr: Ptr, arg: number) : number {
-  return Math.floor(ptr / POS_SIZE) + arg;
+  return Math.floor(ptr / MUL_C) + arg;
 }
 
 function get_arg(term: Ptr, idx: number) : Ptr {
@@ -240,6 +250,16 @@ function show(term: Ptr) : string {
         case DP1:
           name(get_arg(term,2), depth + 1);
           break;
+        case CTR:
+          for (var i = 0; i < get_ex0(term); ++i) {
+            name(get_arg(term,i), depth + 1);
+          }
+          break;
+        case CAL:
+          for (var i = 0; i < get_ex0(term); ++i) {
+            name(get_arg(term,i), depth + 1);
+          }
+          break;
       }
     }
   }
@@ -252,20 +272,21 @@ function show(term: Ptr) : string {
       //console.log("go", stacks);
       //if (depth > 30) return "(...)";
       switch (get_tag(term)) {
-        case LAM:
-          var body = go(get_arg(term,1), stacks, seen, depth + 1);
+        case LAM: {
+          let body = go(get_arg(term,1), stacks, seen, depth + 1);
+          let name = "~";
           if (get_tag(get_arg(term,0)) !== NIL) {
-            var name = names[ptr(VAR,get_pos(term))] || "?";
-          } else {
-            var name = "~";
+            name = names[ptr(VAR,get_pos(term))] || "?";
           }
-          return "λ" + name + "." + body;
-        case APP:
-          var func = go(get_arg(term,0), stacks, seen, depth + 1);
-          var argm = go(get_arg(term,1), stacks, seen, depth + 1);
+          return "λ" + name + ":" + body;
+        }
+        case APP: {
+          let func = go(get_arg(term,0), stacks, seen, depth + 1);
+          let argm = go(get_arg(term,1), stacks, seen, depth + 1);
           return "(" + func + " " + argm + ")"
-        case PAR:
-          var col = get_col(term);
+        }
+        case PAR: {
+          let col = get_ex0(term);
           if (!stacks[col]) {
             stacks[col] = "";
           }
@@ -277,22 +298,44 @@ function show(term: Ptr) : string {
               return go(get_arg(term,1), {...stacks,[col]:stacks[col].slice(1)}, seen, depth + 1);
             }
           } else {
-            var val0 = go(get_arg(term,0), stacks, seen, depth + 1);
-            var val1 = go(get_arg(term,1), stacks, seen, depth + 1);
+            let val0 = go(get_arg(term,0), stacks, seen, depth + 1);
+            let val1 = go(get_arg(term,1), stacks, seen, depth + 1);
             return "{" + val0 + " " + val1 + "}"
           }
-        case DP0:
-          var col = get_col(term);
+        }
+        case DP0: {
+          let col = get_ex0(term);
           return "" + go(get_arg(term,2), {...stacks,[col]:"0"+stacks[col]}, seen, depth + 1);
-        case DP1:
-          var col = get_col(term);
+        }
+        case DP1: {
+          let col = get_ex0(term);
           return "" + go(get_arg(term,2), {...stacks,[col]:"1"+stacks[col]}, seen, depth + 1);
-        case VAR:
+        }
+        case CTR: {
+          let func = get_ex1(term);
+          let args = [];
+          for (let i = 0; i < get_ex0(term); ++i) {
+            args.push(go(get_arg(term,i), stacks, seen, depth + 1));
+          }
+          return "$" + String(func) + "{" + args.join(" ") + "}";
+        }
+        case CAL: {
+          let func = get_ex1(term);
+          let args = [];
+          for (let i = 0; i < get_ex0(term); ++i) {
+            args.push(go(get_arg(term,i), stacks, seen, depth + 1));
+          }
+          return "@" + String(func) + "{" + args.join(" ") + "}";
+        }
+        case VAR: {
           return names[term] || "^"+String(get_pos(term)) + "<" + show_ptr(MEM[get_pos(term)]) + ">";
-        case LNK:
+        }
+        case LNK: {
           return "!";
-        case NIL:
+        }
+        case NIL: {
           return "~";
+        }
       }
       return "?(" + get_tag(term) + ")";
     }
@@ -311,93 +354,95 @@ function show_tag(tag: Tag) {
     case VAR: return "VAR";
     case LNK: return "LNK";
     case NIL: return "NIL";
+    case CTR: return "CTR";
+    case CAL: return "CAL";
   }
 }
 
 function show_ptr(ptr: Ptr) {
-  return show_tag(get_tag(ptr)) + ":" + get_pos(ptr) + (get_col(ptr) !== 0 ? "|" + get_col(ptr) : "");
+  return show_tag(get_tag(ptr)) + ":" + get_pos(ptr) + (get_ex0(ptr) !== 0 ? "|" + get_ex0(ptr) : "");
 }
 
 function show_mem() {
   return MEM.map((x,i) => ("    "+i).slice(-3)+" "+show_ptr(x)).filter((x) => x.indexOf("NIL:0") === -1).join("\n");
 }
 
-function debug_mem() : string {
-  var cover : any = {};
-  var nodes : any = {};
-  var count : any = 0;
-  for (var i = 0; i < MEM.length; ++i) {
-    let tag : any = get_tag(MEM[i]);
-    let pos : any = get_pos(MEM[i]);
-    switch (tag) {
-      case LAM:
-        nodes[pos] = "Lam";
-        cover[pos+0] = 1;
-        cover[pos+1] = 1;
-        break;
-      case APP:
-        nodes[pos] = "App";
-        cover[pos+0] = 1;
-        cover[pos+1] = 1;
-        break;
-      case PAR:
-        nodes[pos] = "Par";
-        cover[pos+0] = 1;
-        cover[pos+1] = 1;
-        break;
-      case DP0:
-        nodes[pos] = "Let";
-        cover[pos+0] = 1;
-        cover[pos+1] = 1;
-        cover[pos+2] = 1;
-        break;
-      case DP1:
-        nodes[pos] = "Let";
-        cover[pos+0] = 1;
-        cover[pos+1] = 1;
-        cover[pos+2] = 1;
-        break;
-    }
-  }
-  function show_down(ptr : any) {
-    switch (get_tag(ptr)) {
-      case DP0: return pad("a" + get_pos(ptr),4);
-      case DP1: return pad("b" + get_pos(ptr),4);
-      case VAR: return pad("x" + get_pos(ptr),4);
-      default: return pad("" + get_pos(ptr), 4);
-    }
-  }
-  function show_link(ptr : any) {
-    if (get_tag(ptr) === NIL) {
-      return pad("~", 4)
-    } else {
-      return pad(String(get_pos(ptr)), 4);
-    }
-  }
-  var text = "";
-  for (var pos = 0; pos < MEM.length; ++pos) {
-    var loc = pad(String(pos), 3);
-    if (!cover[pos] && MEM[pos]) {
-      text += loc + " ? " + pad(show_ptr(MEM[pos]),9) + "\n";
-    } else {
-      switch (nodes[pos] || 0) {
-        case "Lam":
-          text += loc + " λ " + show_link(MEM[pos+0]) + " " + show_down(MEM[pos+1]) + "\n";
-          break;
-        case "App":
-          text += loc + " @ " + show_down(MEM[pos+0]) + " " + show_down(MEM[pos+1]) + "\n";
-          break;
-        case "Par":
-          text += loc + " & " + show_down(MEM[pos+0]) + " " + show_down(MEM[pos+1]) + "\n";
-          break;
-        case "Let":
-          text += loc + " $ " + show_down(MEM[pos+2]) + "\n";
-          break;
-      }
-    }
-  }
-  return text;
-}
+//function debug_mem() : string {
+  //var cover : any = {};
+  //var nodes : any = {};
+  //var count : any = 0;
+  //for (var i = 0; i < MEM.length; ++i) {
+    //let tag : any = get_tag(MEM[i]);
+    //let pos : any = get_pos(MEM[i]);
+    //switch (tag) {
+      //case LAM:
+        //nodes[pos] = "Lam";
+        //cover[pos+0] = 1;
+        //cover[pos+1] = 1;
+        //break;
+      //case APP:
+        //nodes[pos] = "App";
+        //cover[pos+0] = 1;
+        //cover[pos+1] = 1;
+        //break;
+      //case PAR:
+        //nodes[pos] = "Par";
+        //cover[pos+0] = 1;
+        //cover[pos+1] = 1;
+        //break;
+      //case DP0:
+        //nodes[pos] = "Let";
+        //cover[pos+0] = 1;
+        //cover[pos+1] = 1;
+        //cover[pos+2] = 1;
+        //break;
+      //case DP1:
+        //nodes[pos] = "Let";
+        //cover[pos+0] = 1;
+        //cover[pos+1] = 1;
+        //cover[pos+2] = 1;
+        //break;
+    //}
+  //}
+  //function show_down(ptr : any) {
+    //switch (get_tag(ptr)) {
+      //case DP0: return pad("a" + get_pos(ptr),4);
+      //case DP1: return pad("b" + get_pos(ptr),4);
+      //case VAR: return pad("x" + get_pos(ptr),4);
+      //default: return pad("" + get_pos(ptr), 4);
+    //}
+  //}
+  //function show_link(ptr : any) {
+    //if (get_tag(ptr) === NIL) {
+      //return pad("~", 4)
+    //} else {
+      //return pad(String(get_pos(ptr)), 4);
+    //}
+  //}
+  //var text = "";
+  //for (var pos = 0; pos < MEM.length; ++pos) {
+    //var loc = pad(String(pos), 3);
+    //if (!cover[pos] && MEM[pos]) {
+      //text += loc + " ? " + pad(show_ptr(MEM[pos]),9) + "\n";
+    //} else {
+      //switch (nodes[pos] || 0) {
+        //case "Lam":
+          //text += loc + " λ " + show_link(MEM[pos+0]) + " " + show_down(MEM[pos+1]) + "\n";
+          //break;
+        //case "App":
+          //text += loc + " @ " + show_down(MEM[pos+0]) + " " + show_down(MEM[pos+1]) + "\n";
+          //break;
+        //case "Par":
+          //text += loc + " & " + show_down(MEM[pos+0]) + " " + show_down(MEM[pos+1]) + "\n";
+          //break;
+        //case "Let":
+          //text += loc + " $ " + show_down(MEM[pos+2]) + "\n";
+          //break;
+      //}
+    //}
+  //}
+  //return text;
+//}
 
 // Parsing
 // -------
@@ -445,11 +490,34 @@ function read(code: string): Ptr {
         || "A" <= code[0] && code[0] <= "Z"
         || "0" <= code[0] && code[0] <= "9"
         || "_" === code[0]
-        || "~" === code[0]) {
+        || "." === code[0]) {
       name += code[0];
       code = code.slice(1);
     }
     return name;
+  }
+
+  function consume(str: string) {
+    skip();
+    if (code.slice(0, str.length) === str) {
+      return code.slice(str.length);
+    } else {
+      console.log("?", code);
+      throw "Bad parse: " + str;
+    }
+  }
+
+  function parse_numb(): number {
+    if (/[0-9]/.test(code[0])) {
+      var num = "";
+      while (/[0-9]/.test(code[0])) {
+        num += code[0];
+        code = code.slice(1);
+      }
+      return Number(num);
+    } else {
+      return Number(0);
+    }
   }
 
   function parse_term(local: number) : Ptr {
@@ -457,65 +525,46 @@ function read(code: string): Ptr {
     var node = 0;
     switch (code[0]) {
       case "λ": 
-        code = code.slice(1);
+        code = consume("λ");
         node = alloc(2);
         var name = parse_name();
-        code = code.slice(1);
+        code = consume(":");
         var body = parse_term(node + 1);
         link(node+0, ptr(NIL,0));
         link(node+1, body);
         lams[name] = node;
         return ptr(LAM, node);
       case "(":
-        code = code.slice(1);
+        code = consume("(");
         node = alloc(2);
         var func = parse_term(node + 0);
         var argm = parse_term(node + 1);
+        code = consume(")");
         link(node+0, func);
         link(node+1, argm);
-        skip();
-        code = code.slice(1);
         return ptr(APP, node);
-      case "{":
-        code = code.slice(1);
-        if (/[0-9]/.test(code[0])) {
-          var num = "";
-          while (/[0-9]/.test(code[0])) {
-            num += code[0];
-            code = code.slice(1);
-          }
-          var col = 0 + (Number(num) || 0);
-        } else {
-          var col = 1;
-        }
+      case "<":
+        code = consume("<");
+        var col = parse_numb();
+        code = consume(">");
         node = alloc(2);
         var val0 = parse_term(node + 0);
         var val1 = parse_term(node + 1);
         link(node+0, val0);
         link(node+1, val1);
         skip();
-        code = code.slice(1);
         return ptr(PAR, node, col);
-      case "$":
-        code = code.slice(1);
-        node = alloc(3);
-        if (code[0] !== " ") {
-          var num = "";
-          while (/[0-9]/.test(code[0])) {
-            num += code[0];
-            code = code.slice(1);
-          }
-          var col = 0 + (Number(num) || 0);
-        } else {
-          var col = 1;
-        }
+      case "!":
+        code = consume("!");
+        code = consume("<");
+        var col = parse_numb();
         var nam0 = parse_name();
         var nam1 = parse_name();
-        skip();
-        code = code.slice(1);
+        code = consume(">");
+        code = consume("=");
+        node = alloc(3);
         var expr = parse_term(node + 2);
-        skip();
-        code = code.slice(1);
+        code = consume(";");
         var body = parse_term(local);
         link(node+0, ptr(NIL,0));
         link(node+1, ptr(NIL,0));
@@ -525,6 +574,40 @@ function read(code: string): Ptr {
         let1s[nam1] = node;
         tag1s[nam1] = col;
         return body;
+      // $0{1 2 3}
+      case "$":
+        code = consume("$");
+        var func = parse_numb();
+        code = consume(":");
+        var arit = parse_numb();
+        code = consume("{");
+        var node = alloc(arit);
+        var args = [];
+        for (var i = 0; i < arit; ++i) {
+          args.push(parse_term(node + i));
+        }
+        code = consume("}");
+        for (var i = 0; i < arit; ++i) {
+          link(node+i, args[i]);
+        }
+        return ptr(CTR, node, arit, func);
+      // @0(1 2 3)
+      case "@":
+        code = consume("@");
+        var func = parse_numb();
+        code = consume(":");
+        var arit = parse_numb();
+        code = consume("{");
+        var node = alloc(arit);
+        var args = [];
+        for (var i = 0; i < arit; ++i) {
+          args.push(parse_term(node + i));
+        }
+        code = consume("}");
+        for (var i = 0; i < arit; ++i) {
+          link(node+i, args[i]);
+        }
+        return ptr(CAL, node, arit, func);
       default:
         var name = parse_name();
         var vari = ptr(NIL,0);
@@ -620,6 +703,14 @@ function collect(term: Ptr, host: null | number) {
         free(host, 1);
       }
       break;
+    case CTR:
+    case CAL:
+      var arity = get_ex0(term);
+      for (var i = 0; i < arity; ++i) {
+        collect(get_arg(term,i), get_loc(term,i));
+      }
+      free(get_loc(term,0), arity);
+      break;
     case VAR:
       link(get_loc(term,0), ptr(NIL,0));
       if (host) {
@@ -688,12 +779,12 @@ function reduce(host: number) : Ptr {
           var par0 = alloc(2);
           link(let0+2, get_arg(term, 1));
           link(app0+0, get_arg(func, 0));
-          link(app0+1, ptr(DP0, let0, get_col(func)));
+          link(app0+1, ptr(DP0, let0, get_ex0(func)));
           link(app1+0, get_arg(func, 1));
-          link(app1+1, ptr(DP1, let0, get_col(func)));
+          link(app1+1, ptr(DP1, let0, get_ex0(func)));
           link(par0+0, ptr(APP, app0));
           link(par0+1, ptr(APP, app1));
-          link(host, ptr(PAR, par0, get_col(func)));
+          link(host, ptr(PAR, par0, get_ex0(func)));
           free(get_loc(term,0), 2);
           free(get_loc(func,0), 2);
           //sanity_check();
@@ -724,15 +815,15 @@ function reduce(host: number) : Ptr {
           var lam1 = alloc(2);
           var par0 = alloc(2);
           var let0 = alloc(3);
-          link(lam0+1, ptr(DP0, let0, get_col(term)));
-          link(lam1+1, ptr(DP1, let0, get_col(term)));
+          link(lam0+1, ptr(DP0, let0, get_ex0(term)));
+          link(lam1+1, ptr(DP1, let0, get_ex0(term)));
           link(par0+0, ptr(VAR, lam0));
           link(par0+1, ptr(VAR, lam1));
           link(let0+2, get_arg(expr, 1));
           subst(get_arg(term,0), ptr(LAM, lam0));
           subst(get_arg(term,1), ptr(LAM, lam1));
           //console.log(debug_mem());
-          subst(get_arg(expr,0), ptr(PAR, par0, get_col(term)));
+          subst(get_arg(expr,0), ptr(PAR, par0, get_ex0(term)));
           link(host, ptr(LAM, get_tag(term) === DP0 ? lam0 : lam1));
           free(get_loc(term,0), 3);
           free(get_loc(expr,0), 2);
@@ -758,7 +849,7 @@ function reduce(host: number) : Ptr {
             ++GAS;
           }
           //console.log("[let-par]", get_pos(term), get_pos(expr));
-          if (get_col(term) === get_col(expr)) {
+          if (get_ex0(term) === get_ex0(expr)) {
             //sanity_check();
             subst(get_arg(term,0), get_arg(expr,0));
             subst(get_arg(term,1), get_arg(expr,1));
@@ -773,15 +864,15 @@ function reduce(host: number) : Ptr {
             var par1 = alloc(2);
             var let0 = alloc(3);
             var let1 = alloc(3);
-            link(par0+0, ptr(DP0,let0,get_col(term)));
-            link(par0+1, ptr(DP0,let1,get_col(term)));
-            link(par1+0, ptr(DP1,let0,get_col(term)));
-            link(par1+1, ptr(DP1,let1,get_col(term)));
+            link(par0+0, ptr(DP0,let0,get_ex0(term)));
+            link(par0+1, ptr(DP0,let1,get_ex0(term)));
+            link(par1+0, ptr(DP1,let0,get_ex0(term)));
+            link(par1+1, ptr(DP1,let1,get_ex0(term)));
             link(let0+2, get_arg(expr,0));
             link(let1+2, get_arg(expr,1));
-            subst(get_arg(term,0), ptr(PAR,par0,get_col(expr)));
-            subst(get_arg(term,1), ptr(PAR,par1,get_col(expr)));
-            link(host, ptr(PAR, get_tag(term) === DP0 ? par0 : par1, get_col(expr)));
+            subst(get_arg(term,0), ptr(PAR,par0,get_ex0(expr)));
+            subst(get_arg(term,1), ptr(PAR,par1,get_ex0(expr)));
+            link(host, ptr(PAR, get_tag(term) === DP0 ? par0 : par1, get_ex0(expr)));
             free(get_loc(term,0), 3);
             free(get_loc(expr,0), 2);
             //sanity_check();
@@ -822,6 +913,13 @@ function normal(host: number) : Ptr {
         case DP1:
           link(get_loc(term,2), go(get_loc(term,2)));
           return term;
+        case CAL:
+        case CTR:
+          var arity = get_ex0(term);
+          for (var i = 0; i < arity; ++i) {
+            link(get_loc(term,i), go(get_loc(term,i)));
+          }
+          return term;
         default:
           return term;
       }
@@ -836,17 +934,17 @@ function normal(host: number) : Ptr {
 import {lambda_to_optimal} from "./lambda_to_optimal.ts"
 
 var code : string = `
-  let Y      = ((λr. λf. (f (r r f))) (λr. λf. (f (r r f))))
+  let Y      = ((λr:λf:(f (r r f))) (λr:λf:(f (r r f))))
 
-  let succ   = λn. λz. λs. (s n)
-  let zero   = λz. λs. z
-  let double = (Y λdouble. λn. (n zero λpred.(succ (succ (double pred)))))
+  let succ   = λn: λz: λs: (s n)
+  let zero   = λz: λs: z
+  let double = (Y λdouble: λn: (n zero λpred:(succ (succ (double pred)))))
 
-  let true   = λt. λf. t
-  let false  = λt. λf. f
-  let nand   = λa. (a λb.(b false true) λb.(b true true))
+  let true   = λt: λf: t
+  let false  = λt: λf: f
+  let nand   = λa: (a λb:(b false true) λb:(b true true))
 
-  let slow   = (Y λslow. λn. (n true λpred.(nand (slow pred) (slow pred))))
+  let slow   = (Y λslow: λn: (n true λpred:(nand (slow pred) (slow pred))))
 
   (slow
     (succ (succ (succ (succ
@@ -861,7 +959,13 @@ var code : string = `
   )
 `;
 
+var code : string = `
+  $0{(λf:λx:(f (f x)) λf:λx:(f (f x))) λx:x}
+`;
+  
+
 var code : string = lambda_to_optimal(code);
+console.log(code);
 
 var term = read(code);
 

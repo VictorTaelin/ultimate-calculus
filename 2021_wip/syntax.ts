@@ -36,6 +36,7 @@ export function show_mem(mem: O.Mem) {
 
 export function show_term(MEM: O.Mem, term: O.Lnk) : string {
   var lets : {[key:string]:number} = {};
+  var kinds : {[key:string]:number} = {};
   var names : {[key:string]:string} = {};
   var count = 0;
   function find_lets(term: O.Lnk) {
@@ -55,16 +56,18 @@ export function show_term(MEM: O.Mem, term: O.Lnk) : string {
       case O.DP0:
         if (!lets[O.get_loc(term,0)]) {
           names[O.get_loc(term,0)] = String(++count);
+          kinds[O.get_loc(term,0)] = O.get_ex0(term);
           lets[O.get_loc(term,0)] = O.get_loc(term,0);
+          find_lets(O.get_lnk(MEM, term, 2));
         }
-        find_lets(O.get_lnk(MEM, term, 2));
         break;
       case O.DP1:
         if (!lets[O.get_loc(term,0)]) {
           names[O.get_loc(term,0)] = String(++count);
+          kinds[O.get_loc(term,0)] = O.get_ex0(term);
           lets[O.get_loc(term,0)] = O.get_loc(term,0);
+          find_lets(O.get_lnk(MEM, term, 2));
         }
-        find_lets(O.get_lnk(MEM, term, 2));
         break;
       case O.CTR:
       case O.CAL:
@@ -126,7 +129,7 @@ export function show_term(MEM: O.Mem, term: O.Lnk) : string {
   var text = "";
   for (var key in lets) {
     var pos = lets[key];
-    var kind = O.get_ex0(term);
+    var kind = kinds[key] || 0;
     var name = names[pos] || "?";
     text += "!" + kind + "<a"+name+" b"+name+"> = " + go(O.deref(MEM, pos + 2)) + ";\n";
   }

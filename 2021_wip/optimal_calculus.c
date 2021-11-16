@@ -214,8 +214,8 @@ Lnk reduce(Mem* MEM, Loc host) {
         switch (get_tag(func)) {
           case LAM: {
             ++GAS;
-            link(MEM, host, get_lnk(MEM, func, 1));
             subst(MEM, get_lnk(MEM,func,0), get_lnk(MEM,term,1));
+            link(MEM, host, get_lnk(MEM, func, 1));
             clear(MEM, get_loc(term,0), 2);
             clear(MEM, get_loc(func,0), 2);
             continue;
@@ -256,10 +256,10 @@ Lnk reduce(Mem* MEM, Loc host) {
             link(MEM, par0+0, lnk(VAR, 0, 0, lam0));
             link(MEM, par0+1, lnk(VAR, 0, 0, lam1));
             link(MEM, let0+2, get_lnk(MEM, expr, 1));
-            link(MEM, host, lnk(LAM, 0, 0, get_tag(term) == DP0 ? lam0 : lam1));
             subst(MEM, get_lnk(MEM,term,0), lnk(LAM, 0, 0, lam0));
             subst(MEM, get_lnk(MEM,term,1), lnk(LAM, 0, 0, lam1));
             subst(MEM, get_lnk(MEM,expr,0), lnk(PAR, get_ex0(term), 0, par0));
+            link(MEM, host, lnk(LAM, 0, 0, get_tag(term) == DP0 ? lam0 : lam1));
             clear(MEM, get_loc(term,0), 3);
             clear(MEM, get_loc(expr,0), 2);
             continue;
@@ -267,9 +267,9 @@ Lnk reduce(Mem* MEM, Loc host) {
           case PAR: {
             if (get_ex0(term) == get_ex0(expr)) {
               ++GAS;
-              link(MEM, host, get_lnk(MEM,expr, get_tag(term) == DP0 ? 0 : 1));
               subst(MEM, get_lnk(MEM,term,0), get_lnk(MEM,expr,0));
               subst(MEM, get_lnk(MEM,term,1), get_lnk(MEM,expr,1));
+              link(MEM, host, get_lnk(MEM,expr, get_tag(term) == DP0 ? 0 : 1));
               clear(MEM, get_loc(term,0), 3);
               clear(MEM, get_loc(expr,0), 2);
               continue;
@@ -285,9 +285,9 @@ Lnk reduce(Mem* MEM, Loc host) {
               link(MEM, par1+1, lnk(DP1,get_ex0(term),0,let1));
               link(MEM, let0+2, get_lnk(MEM,expr,0));
               link(MEM, let1+2, get_lnk(MEM,expr,1));
-              link(MEM, host, lnk(PAR, get_ex0(expr), 0, get_tag(term) == DP0 ? par0 : par1));
               subst(MEM, get_lnk(MEM,term,0), lnk(PAR,get_ex0(expr),0,par0));
               subst(MEM, get_lnk(MEM,term,1), lnk(PAR,get_ex0(expr),0,par1));
+              link(MEM, host, lnk(PAR, get_ex0(expr), 0, get_tag(term) == DP0 ? par0 : par1));
               clear(MEM, get_loc(term,0), 3);
               clear(MEM, get_loc(expr,0), 2);
               continue;
@@ -305,9 +305,9 @@ Lnk reduce(Mem* MEM, Loc host) {
               link(MEM, ctr1+i, lnk(DP1, 0, 0, leti));
               link(MEM, leti+2, get_lnk(MEM,expr,i));
             }
-            link(MEM, host, lnk(CTR, func, arit, get_tag(term) == DP0 ? ctr0 : ctr1));
             subst(MEM, get_lnk(MEM,term,0), lnk(CTR, ctr0, func, arit));
             subst(MEM, get_lnk(MEM,term,1), lnk(CTR, ctr1, func, arit));
+            link(MEM, host, lnk(CTR, func, arit, get_tag(term) == DP0 ? ctr0 : ctr1));
             clear(MEM, get_loc(term,0), 3);
             clear(MEM, get_loc(expr,0), arit);
             return deref(MEM, host);

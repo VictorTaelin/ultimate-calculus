@@ -24,21 +24,28 @@ var code : string = `
   )
 `;
 
-var code : string = `
-  @2(
-    $0{$0{$0{$0{
-    $0{$0{$0{$0{$0{$0{$0{$0{
-    $0{$0{$0{$0{$0{$0{$0{$0{
-    $0{$0{$0{$0{$0{$0{$0{$0{
-      $2{}
-    }}}}}}}}
-    }}}}}}}}
-    }}}}}}}}
-    }}}}
-  )
-`;
+//var code : string = `
+  //@2(
+    //$0{$0{$0{$0{$0{$0{$0{$0{
+    //$0{$0{$0{$0{$0{$0{$0{$0{
+    //$0{$0{$0{$0{$0{$0{$0{$0{
+      //$2{}
+    //}}}}}}}}
+    //}}}}}}}}
+    //}}}}}}}}
+  //)
+//`;
+
+//var code : string = `
+  //(
+    //λf:λx:(f (f (f (f (f (f (f (f (f x)))))))))
+    //λf:λx:(f (f (f (f (f (f (f (f (f x)))))))))
+    //λb:λt:λf:(b f t)
+    //λt:λf:t)
+//`;
 
 var code : string = lambda_to_optimal(code);
+
 console.log("term: " + code + "\n");
 
 var MEM = read(code);
@@ -50,11 +57,5 @@ console.log("cost: " + gas);
 console.log("norm: " + show_as_lambda(MEM));
 console.log("");
 
-console.log(MEM.lnk.size);
+//console.log(MEM.lnk.size);
 
-// JS =  4m rwts/s
-// C  = 56m rwts/s
-//
-// :)
-//
-// Will soon test with datatypes... and, then, threads!

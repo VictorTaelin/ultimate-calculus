@@ -1,8 +1,9 @@
 // Tests
 // -----
 
-import {read, lambda_to_optimal, show_as_lambda} from "./syntax.ts"
-import {MEM, normal, get_gas} from "./optimal_calculus.ts"
+import {read, lambda_to_optimal, show_as_lambda, show_mem} from "./syntax.ts"
+import {normal, get_gas, deref} from "./optimal_calculus.ts"
+import {normal_ffi} from "./optimal_calculus_ffi.ts"
 
 var code : string = `
   let Y      = ((λr:λf:(f (r r f))) (λr:λf:(f (r r f))))
@@ -17,35 +18,50 @@ var code : string = `
 
   let slow   = (Y λslow: λn: (n true λpred:(nand (slow pred) (slow pred))))
 
-  (slow
-    (succ (succ (succ (succ
-    (succ (succ (succ (succ
-    (succ (succ (succ (succ
-    (succ (succ (succ (succ
-      zero
-    ))))
-    ))))
-    ))))
-    ))))
+  λt: (t
+    (slow (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ zero)))))))))))))))))))
+    (slow (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ zero)))))))))))))))))))
+    (slow (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ zero)))))))))))))))))))
+    (slow (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ zero)))))))))))))))))))
+    (slow (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ zero)))))))))))))))))))
+    (slow (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ zero)))))))))))))))))))
+    (slow (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ zero)))))))))))))))))))
+    (slow (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ zero)))))))))))))))))))
   )
 `;
 
-var code : string = `
-  @2(
-    $0{$0{$0{$0{$0{$0{$0{$0{
-    $0{$0{$0{$0{$0{$0{$0{$0{
-    $0{$0{$0{$0{$0{$0{$0{$0{
-      $2{}
-    }}}}}}}}
-    }}}}}}}}
-    }}}}}}}}
-  )
-`;
+//var code : string = `
+  //@2(
+    //$0{$0{$0{$0{$0{$0{$0{$0{
+    //$0{$0{$0{$0{$0{$0{$0{$0{
+    //$0{$0{$0{$0{$0{$0{$0{$0{
+      //$2{}
+    //}}}}}}}}
+    //}}}}}}}}
+    //}}}}}}}}
+  //)
+//`;
+
+//var code : string = `
+  //(λf:λx:(f (f (f (f (f x))))) λf:λx:(f (f x)) λb:(b λt:λf:f λt:λf:t) λt:λf:t)
+//`;
+
   
 var code : string = lambda_to_optimal(code);
-console.log(code);
+console.log("term: " + code + "\n");
 
-read(code);
-var norm = normal(0);
+var MEM = read(code);
+
+//var norm = normal(MEM, 0);
+var norm = normal_ffi(MEM, 0);
+
 console.log("cost: " + String(get_gas()));
-console.log("norm: " + show_as_lambda(MEM[0]));
+console.log("norm: " + show_as_lambda(MEM));
+console.log("");
+
+// JS =  4m rwts/s
+// C  = 56m rwts/s
+//
+// :)
+//
+// Will soon test with datatypes... and, then, threads!

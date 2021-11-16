@@ -1,4 +1,5 @@
-import * as O from './optimal_calculus.ts';
+import * as O from "./optimal_calculus.ts";
+import {pad} from "./utils.ts";
 
 // Stringification
 // ---------------
@@ -11,77 +12,84 @@ export function show_tag(tag: O.Tag) {
     case O.DP0: return "DP0";
     case O.DP1: return "DP1";
     case O.VAR: return "VAR";
-    case O.LNK: return "LNK";
+    case O.ARG: return "ARG";
     case O.NIL: return "NIL";
     case O.CTR: return "CTR";
     case O.CAL: return "CAL";
   }
 }
 
-export function show_ptr(ptr: O.Ptr) {
-  return show_tag(O.get_tag(ptr)) + ":" + O.get_pos(ptr) + (O.get_ex0(ptr) !== 0 ? "|" + O.get_ex0(ptr) : "");
+export function show_lnk(lnk: O.Lnk) {
+  return show_tag(O.get_tag(lnk)) + ":" + O.get_loc(lnk,0) + "[" + O.get_ex0(lnk) + "," + O.get_ex1(lnk) + "]";
 }
 
-export function show_mem() {
-  return O.MEM.map((x,i) => ("    "+i).slice(-3)+" "+show_ptr(x)).filter((x) => x.indexOf("O.NIL:0") === -1).join("\n");
+export function show_mem(mem: O.Mem) {
+  var text = "";
+  for (var i = 0; i < mem.lnk.size; ++i) {
+    var lnk = O.array_read(mem.lnk, i);
+    if (lnk !== 0) {
+      text += pad(String(i),4) + " | " + show_lnk(lnk) + "\n";
+    }
+  }
+  return text;
 }
 
-export function show_term(term: O.Ptr) : string {
+export function show_term(MEM: O.Mem, term: O.Lnk) : string {
   var lets : {[key:string]:number} = {};
   var names : {[key:string]:string} = {};
   var count = 0;
-  function find_lets(term: O.Ptr) {
+  function find_lets(term: O.Lnk) {
     switch (O.get_tag(term)) {
       case O.LAM:
-        names[O.get_pos(term)] = String(++count);
-        find_lets(O.get_arg(term,1));
+        names[O.get_loc(term,0)] = String(++count);
+        find_lets(O.get_lnk(MEM, term, 1));
         break;
       case O.APP:
-        find_lets(O.get_arg(term,0));
-        find_lets(O.get_arg(term,1));
+        find_lets(O.get_lnk(MEM, term, 0));
+        find_lets(O.get_lnk(MEM, term, 1));
         break;
       case O.PAR:
-        find_lets(O.get_arg(term,0));
-        find_lets(O.get_arg(term,1));
+        find_lets(O.get_lnk(MEM, term, 0));
+        find_lets(O.get_lnk(MEM, term, 1));
         break;
       case O.DP0:
-        if (!lets[O.get_pos(term)]) {
-          names[O.get_pos(term)] = String(++count);
-          lets[O.get_pos(term)] = O.get_pos(term);
+        if (!lets[O.get_loc(term,0)]) {
+          names[O.get_loc(term,0)] = String(++count);
+          lets[O.get_loc(term,0)] = O.get_loc(term,0);
         }
-        find_lets(O.get_arg(term,2));
+        find_lets(O.get_lnk(MEM, term, 2));
         break;
       case O.DP1:
-        if (!lets[O.get_pos(term)]) {
-          names[O.get_pos(term)] = String(++count);
-          lets[O.get_pos(term)] = O.get_pos(term);
+        if (!lets[O.get_loc(term,0)]) {
+          names[O.get_loc(term,0)] = String(++count);
+          lets[O.get_loc(term,0)] = O.get_loc(term,0);
         }
-        find_lets(O.get_arg(term,2));
+        find_lets(O.get_lnk(MEM, term, 2));
         break;
       case O.CTR:
       case O.CAL:
         var arity = O.get_ex1(term);
         for (var i = 0; i < arity; ++i) {
-          find_lets(O.get_arg(term,i));
+          find_lets(O.get_lnk(MEM, term,i));
         }
         break;
     }
   }
-  function go(term: O.Ptr) : string {
+  function go(term: O.Lnk) : string {
     switch (O.get_tag(term)) {
       case O.LAM: {
-        var name = "x" + (names[O.get_pos(term)] || "?");
-        return "λ" + name + ":" + go(O.get_arg(term,1));
+        var name = "x" + (names[O.get_loc(term,0)] || "?");
+        return "λ" + name + ":" + go(O.get_lnk(MEM, term, 1));
       }
       case O.APP: {
-        let func = go(O.get_arg(term,0));
-        let argm = go(O.get_arg(term,1));
+        let func = go(O.get_lnk(MEM, term, 0));
+        let argm = go(O.get_lnk(MEM, term, 1));
         return "(" + func + " " + argm + ")";
       }
       case O.PAR: {
         let kind = O.get_ex0(term);
-        let func = go(O.get_arg(term,0));
-        let argm = go(O.get_arg(term,1));
+        let func = go(O.get_lnk(MEM, term, 0));
+        let argm = go(O.get_lnk(MEM, term, 1));
         return "&" + kind + "<" + func + " " + argm + ">";
       }
       case O.CTR: {
@@ -89,7 +97,7 @@ export function show_term(term: O.Ptr) : string {
         let arit = O.get_ex1(term);
         let args = [];
         for (let i = 0; i < arit; ++i) {
-          args.push(go(O.get_arg(term,i)));
+          args.push(go(O.get_lnk(MEM, term, i)));
         }
         return "$" + func + ":" + arit + "{" + args.join(" ") + "}";
       }
@@ -98,21 +106,21 @@ export function show_term(term: O.Ptr) : string {
         let arit = O.get_ex1(term);
         let args = [];
         for (let i = 0; i < arit; ++i) {
-          args.push(go(O.get_arg(term,i)));
+          args.push(go(O.get_lnk(MEM, term, i)));
         }
         return "@" + func + ":" + arit + "(" + args.join(" ") + ")";
       }
       case O.DP0: {
-        return "a" + (names[O.get_pos(term)] || "?");
+        return "a" + (names[O.get_loc(term,0)] || "?");
       }
       case O.DP1: {
-        return "b" + (names[O.get_pos(term)] || "?");
+        return "b" + (names[O.get_loc(term,0)] || "?");
       }
       case O.VAR: {
-        return "x" + (names[O.get_pos(term)] || "?");
+        return "x" + (names[O.get_loc(term,0)] || "?");
       }
     }
-    return "?" + show_ptr(term);
+    return "?" + show_lnk(term);
   }
   find_lets(term);
   var text = "";
@@ -120,56 +128,57 @@ export function show_term(term: O.Ptr) : string {
     var pos = lets[key];
     var kind = O.get_ex0(term);
     var name = names[pos] || "?";
-    text += "!" + kind + "<a"+name+" b"+name+"> = " + go(O.MEM[pos + 2]) + ";\n";
+    text += "!" + kind + "<a"+name+" b"+name+"> = " + go(O.deref(MEM, pos + 2)) + ";\n";
   }
   text += go(term);
   return text;
 }
 
-export function show_as_lambda(term: O.Ptr) : string {
+export function show_as_lambda(MEM: O.Mem, input_term: O.Lnk | null = null) : string {
+  var term : O.Lnk = input_term ? input_term : O.deref(MEM, 0);
   var names : O.MAP<string> = {};
-  var count = 0;
+  var count : number = 0;
   var seen : O.MAP<boolean> = {};
-  function name(term: O.Ptr, depth: number) {
+  function name(term: O.Lnk, depth: number) {
     if (!seen[term]) {
       seen[term] = true;
       switch (O.get_tag(term)) {
         case O.LAM:
-          if (O.get_tag(O.get_arg(term,0)) !== O.NIL) {
-            names[O.ptr(O.VAR,O.get_pos(term))] = "x" + (++count);
+          if (O.get_tag(O.get_lnk(MEM, term, 0)) !== O.NIL) {
+            names[O.lnk(O.VAR, 0, 0, O.get_loc(term,0))] = "x" + (++count);
           }
-          name(O.get_arg(term,1), depth + 1);
+          name(O.get_lnk(MEM, term, 1), depth + 1);
           break;
         case O.APP:
-          name(O.get_arg(term,0), depth + 1);
-          name(O.get_arg(term,1), depth + 1);
+          name(O.get_lnk(MEM, term, 0), depth + 1);
+          name(O.get_lnk(MEM, term, 1), depth + 1);
           break;
         case O.PAR:
-          name(O.get_arg(term,0), depth + 1);
-          name(O.get_arg(term,1), depth + 1);
+          name(O.get_lnk(MEM, term, 0), depth + 1);
+          name(O.get_lnk(MEM, term, 1), depth + 1);
           break;
         case O.DP0:
-          name(O.get_arg(term,2), depth + 1);
+          name(O.get_lnk(MEM, term, 2), depth + 1);
           break;
         case O.DP1:
-          name(O.get_arg(term,2), depth + 1);
+          name(O.get_lnk(MEM, term, 2), depth + 1);
           break;
         case O.CTR:
           var arity = O.get_ex1(term);
           for (var i = 0; i < arity; ++i) {
-            name(O.get_arg(term,i), depth + 1);
+            name(O.get_lnk(MEM, term, i), depth + 1);
           }
           break;
         case O.CAL:
           var arity = O.get_ex1(term);
           for (var i = 0; i < arity; ++i) {
-            name(O.get_arg(term,i), depth + 1);
+            name(O.get_lnk(MEM, term, i), depth + 1);
           }
           break;
       }
     }
   }
-  function go(term: O.Ptr, stacks: O.MAP<string>, seen: O.MAP<number>, depth: number) : string {
+  function go(term: O.Lnk, stacks: O.MAP<string>, seen: O.MAP<number>, depth: number) : string {
     if (seen[term]) {
       return "@";
       //return "(seen:" + Object.keys(seen).length + " | " + "depth:" + depth + ")";
@@ -178,16 +187,16 @@ export function show_as_lambda(term: O.Ptr) : string {
       //if (depth > 30) return "(...)";
       switch (O.get_tag(term)) {
         case O.LAM: {
-          let body = go(O.get_arg(term,1), stacks, seen, depth + 1);
+          let body = go(O.get_lnk(MEM, term, 1), stacks, seen, depth + 1);
           let name = "~";
-          if (O.get_tag(O.get_arg(term,0)) !== O.NIL) {
-            name = names[O.ptr(O.VAR,O.get_pos(term))] || "?";
+          if (O.get_tag(O.get_lnk(MEM, term, 0)) !== O.NIL) {
+            name = names[O.lnk(O.VAR, 0, 0, O.get_loc(term,0))] || "?";
           }
           return "λ" + name + ":" + body;
         }
         case O.APP: {
-          let func = go(O.get_arg(term,0), stacks, seen, depth + 1);
-          let argm = go(O.get_arg(term,1), stacks, seen, depth + 1);
+          let func = go(O.get_lnk(MEM, term, 0), stacks, seen, depth + 1);
+          let argm = go(O.get_lnk(MEM, term, 1), stacks, seen, depth + 1);
           return "(" + func + " " + argm + ")"
         }
         case O.PAR: {
@@ -197,30 +206,30 @@ export function show_as_lambda(term: O.Ptr) : string {
           }
           if (stacks[col] !== undefined && stacks[col].length > 0) {
             if (stacks[col][0] === "0") {
-              return go(O.get_arg(term,0), {...stacks,[col]:stacks[col].slice(1)}, seen, depth + 1);
+              return go(O.get_lnk(MEM, term, 0), {...stacks,[col]:stacks[col].slice(1)}, seen, depth + 1);
             } else {
-              return go(O.get_arg(term,1), {...stacks,[col]:stacks[col].slice(1)}, seen, depth + 1);
+              return go(O.get_lnk(MEM, term, 1), {...stacks,[col]:stacks[col].slice(1)}, seen, depth + 1);
             }
           } else {
-            let val0 = go(O.get_arg(term,0), stacks, seen, depth + 1);
-            let val1 = go(O.get_arg(term,1), stacks, seen, depth + 1);
+            let val0 = go(O.get_lnk(MEM, term, 0), stacks, seen, depth + 1);
+            let val1 = go(O.get_lnk(MEM, term, 1), stacks, seen, depth + 1);
             return "{" + val0 + " " + val1 + "}"
           }
         }
         case O.DP0: {
           let col = O.get_ex0(term);
-          return "" + go(O.get_arg(term,2), {...stacks,[col]:"0"+stacks[col]}, seen, depth + 1);
+          return "" + go(O.get_lnk(MEM, term, 2), {...stacks,[col]:"0"+stacks[col]}, seen, depth + 1);
         }
         case O.DP1: {
           let col = O.get_ex0(term);
-          return "" + go(O.get_arg(term,2), {...stacks,[col]:"1"+stacks[col]}, seen, depth + 1);
+          return "" + go(O.get_lnk(MEM, term, 2), {...stacks,[col]:"1"+stacks[col]}, seen, depth + 1);
         }
         case O.CTR: {
           let func = O.get_ex0(term);
           var arit = O.get_ex1(term);
           let args = [];
           for (let i = 0; i < arit; ++i) {
-            args.push(go(O.get_arg(term,i), stacks, seen, depth + 1));
+            args.push(go(O.get_lnk(MEM, term, i), stacks, seen, depth + 1));
           }
           return "$" + String(func) + "{" + args.join(" ") + "}";
         }
@@ -229,14 +238,14 @@ export function show_as_lambda(term: O.Ptr) : string {
           var arit = O.get_ex1(term);
           let args = [];
           for (let i = 0; i < arit; ++i) {
-            args.push(go(O.get_arg(term,i), stacks, seen, depth + 1));
+            args.push(go(O.get_lnk(MEM, term, i), stacks, seen, depth + 1));
           }
           return "@" + String(func) + "{" + args.join(" ") + "}";
         }
         case O.VAR: {
-          return names[term] || "^"+String(O.get_pos(term)) + "<" + show_ptr(O.MEM[O.get_pos(term)]) + ">";
+          return names[term] || "^"+String(O.get_loc(term,0)) + "<" + show_lnk(O.deref(MEM, O.get_loc(term,0))) + ">";
         }
-        case O.LNK: {
+        case O.ARG: {
           return "!";
         }
         case O.NIL: {
@@ -253,7 +262,7 @@ export function show_as_lambda(term: O.Ptr) : string {
 // Parsing
 // -------
 
-export function read(code: string) {
+export function read(code: string) : O.Mem {
   //O.PARSING = true;
   var lams  : O.MAP<number> = {};
   var let0s : O.MAP<number> = {};
@@ -266,15 +275,15 @@ export function read(code: string) {
     for (var [var_name, var_pos] of vars) {
       var lam = lams[var_name]
       if (lam !== undefined) {
-        O.link(var_pos, O.ptr(O.VAR,lam));
+        O.link(MEM, var_pos, O.lnk(O.VAR,0,0,lam));
       }
       var let0 = let0s[var_name]
       if (let0 !== undefined) {
-        O.link(var_pos, O.ptr(O.DP0,let0,tag0s[var_name]||0));
+        O.link(MEM, var_pos, O.lnk(O.DP0,tag0s[var_name]||0,0,let0));
       }
       var let1 = let1s[var_name]
       if (let1 !== undefined) {
-        O.link(var_pos, O.ptr(O.DP1,let1,tag1s[var_name]||0));
+        O.link(MEM, var_pos, O.lnk(O.DP1,tag1s[var_name]||0,0,let1));
       }
     }
   }
@@ -321,41 +330,41 @@ export function read(code: string) {
     }
   }
 
-  function parse_term(local: number) : O.Ptr {
+  function parse_term(local: number) : O.Lnk {
     skip();
     var node = 0;
     switch (code[0]) {
       case "λ": 
         code = consume("λ");
-        node = O.alloc(2);
+        node = O.alloc(MEM, 2);
         var name = parse_name();
         code = consume(":");
         var body = parse_term(node + 1);
-        O.link(node+0, O.ptr(O.NIL,0));
-        O.link(node+1, body);
+        O.link(MEM, node+0, O.lnk(O.NIL,0,0,0));
+        O.link(MEM, node+1, body);
         lams[name] = node;
-        return O.ptr(O.LAM, node);
+        return O.lnk(O.LAM, 0, 0, node);
       case "(":
         code = consume("(");
-        node = O.alloc(2);
+        node = O.alloc(MEM, 2);
         var func = parse_term(node + 0);
         var argm = parse_term(node + 1);
         code = consume(")");
-        O.link(node+0, func);
-        O.link(node+1, argm);
-        return O.ptr(O.APP, node);
+        O.link(MEM, node+0, func);
+        O.link(MEM, node+1, argm);
+        return O.lnk(O.APP, 0, 0, node);
       case "&":
         code = consume("&");
         var col = parse_numb();
         code = consume("<");
         code = consume(">");
-        node = O.alloc(2);
+        node = O.alloc(MEM, 2);
         var val0 = parse_term(node + 0);
         var val1 = parse_term(node + 1);
-        O.link(node+0, val0);
-        O.link(node+1, val1);
+        O.link(MEM, node+0, val0);
+        O.link(MEM, node+1, val1);
         skip();
-        return O.ptr(O.PAR, node, col);
+        return O.lnk(O.PAR, col, 0, node);
       case "!":
         code = consume("!");
         var col = parse_numb();
@@ -364,13 +373,13 @@ export function read(code: string) {
         var nam1 = parse_name();
         code = consume(">");
         code = consume("=");
-        node = O.alloc(3);
+        node = O.alloc(MEM, 3);
         var expr = parse_term(node + 2);
         code = consume(";");
         var body = parse_term(local);
-        O.link(node+0, O.ptr(O.NIL,0));
-        O.link(node+1, O.ptr(O.NIL,0));
-        O.link(node+2, expr);
+        O.link(MEM, node+0, O.lnk(O.NIL, 0, 0, 0));
+        O.link(MEM, node+1, O.lnk(O.NIL, 0, 0, 0));
+        O.link(MEM, node+2, expr);
         let0s[nam0] = node;
         tag0s[nam0] = col;
         let1s[nam1] = node;
@@ -383,16 +392,16 @@ export function read(code: string) {
         code = consume(":");
         var arit = parse_numb();
         code = consume("{");
-        var node = O.alloc(arit);
+        var node = O.alloc(MEM, arit);
         var args = [];
         for (var i = 0; i < arit; ++i) {
           args.push(parse_term(node + i));
         }
         code = consume("}");
         for (var i = 0; i < arit; ++i) {
-          O.link(node+i, args[i]);
+          O.link(MEM, node+i, args[i]);
         }
-        return O.ptr(O.CTR, node, func, arit);
+        return O.lnk(O.CTR, func, arit, node);
       // @0(1 2 3)
       case "@":
         code = consume("@");
@@ -400,28 +409,30 @@ export function read(code: string) {
         code = consume(":");
         var arit = parse_numb();
         code = consume("(");
-        var node = O.alloc(arit);
+        var node = O.alloc(MEM, arit);
         var args = [];
         for (var i = 0; i < arit; ++i) {
           args.push(parse_term(node + i));
         }
         code = consume(")");
         for (var i = 0; i < arit; ++i) {
-          O.link(node+i, args[i]);
+          O.link(MEM, node+i, args[i]);
         }
-        return O.ptr(O.CAL, node, func, arit);
+        return O.lnk(O.CAL, func, arit, node);
       default:
         var name = parse_name();
-        var vari = O.ptr(O.NIL,0);
+        var vari = O.lnk(O.NIL,0,0,0);
         vars.push([name, local]);
         return vari;
     }
   }
-  O.set_mem([O.ptr(O.NIL,0)]);
-  O.link(0, parse_term(0));
-  build();
-}
 
+  var MEM = O.init();
+  var root = parse_term(0);
+  O.link(MEM, 0, root);
+  build();
+  return MEM;
+}
 
 // Lambda to Optimal
 // -----------------

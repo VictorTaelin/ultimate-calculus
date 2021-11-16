@@ -21,43 +21,36 @@ var code : string = `
   λt: (t
     (slow (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ zero)))))))))))))))))))
     (slow (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ zero)))))))))))))))))))
-    (slow (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ zero)))))))))))))))))))
-    (slow (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ zero)))))))))))))))))))
-    (slow (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ zero)))))))))))))))))))
-    (slow (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ zero)))))))))))))))))))
-    (slow (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ zero)))))))))))))))))))
-    (slow (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ (succ zero)))))))))))))))))))
   )
 `;
 
-//var code : string = `
-  //@2(
-    //$0{$0{$0{$0{$0{$0{$0{$0{
-    //$0{$0{$0{$0{$0{$0{$0{$0{
-    //$0{$0{$0{$0{$0{$0{$0{$0{
-      //$2{}
-    //}}}}}}}}
-    //}}}}}}}}
-    //}}}}}}}}
-  //)
-//`;
+var code : string = `
+  @2(
+    $0{$0{$0{$0{
+    $0{$0{$0{$0{$0{$0{$0{$0{
+    $0{$0{$0{$0{$0{$0{$0{$0{
+    $0{$0{$0{$0{$0{$0{$0{$0{
+      $2{}
+    }}}}}}}}
+    }}}}}}}}
+    }}}}}}}}
+    }}}}
+  )
+`;
 
-//var code : string = `
-  //(λf:λx:(f (f (f (f (f x))))) λf:λx:(f (f x)) λb:(b λt:λf:f λt:λf:t) λt:λf:t)
-//`;
-
-  
 var code : string = lambda_to_optimal(code);
 console.log("term: " + code + "\n");
 
 var MEM = read(code);
 
-//var norm = normal(MEM, 0);
-var norm = normal_ffi(MEM, 0);
+//var gas = normal(MEM, 0);
+var gas = normal_ffi(MEM, 0);
 
-console.log("cost: " + String(get_gas()));
+console.log("cost: " + gas);
 console.log("norm: " + show_as_lambda(MEM));
 console.log("");
+
+console.log(MEM.lnk.size);
 
 // JS =  4m rwts/s
 // C  = 56m rwts/s

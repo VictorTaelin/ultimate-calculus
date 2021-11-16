@@ -124,8 +124,10 @@ export function alloc(MEM: Mem, size: number) : Loc {
   }
 }
 
-export function free(MEM: Mem, loc: Loc, size: number) {
-  array_push(MEM.use[size], loc);
+export function clear(MEM: Mem, loc: Loc, size: number) {
+  if (size > 0) {
+    array_push(MEM.use[size], loc);
+  }
 }
 
 export function init(capacity: number = 2048 * array_megabyte) {
@@ -157,19 +159,19 @@ export function collect(MEM: Mem, term: Lnk, host: Loc) {
         link(MEM, get_loc(get_lnk(MEM,term,0),0), lnk(NIL,0,0,0));
       }
       collect(MEM, get_lnk(MEM,term,1), get_loc(term,1));
-      free(MEM, get_loc(term,0), 2);
+      clear(MEM, get_loc(term,0), 2);
       break;
     }
     case APP: {
       collect(MEM, get_lnk(MEM,term,0), get_loc(term,0));
       collect(MEM, get_lnk(MEM,term,1), get_loc(term,1));
-      free(MEM, get_loc(term,0), 2);
+      clear(MEM, get_loc(term,0), 2);
       break;
     }
     case PAR: {
       collect(MEM, get_lnk(MEM,term,0), get_loc(term,0));
       collect(MEM, get_lnk(MEM,term,1), get_loc(term,1));
-      free(MEM, get_loc(term,0), 2);
+      clear(MEM, get_loc(term,0), 2);
       if (host) {
         link(MEM, host, lnk(NIL,0,0,0));
       }
@@ -178,14 +180,14 @@ export function collect(MEM: Mem, term: Lnk, host: Loc) {
     case DP0: {
       link(MEM, get_loc(term,0), lnk(NIL,0,0,0));
       if (host) {
-        free(MEM, host, 1);
+        clear(MEM, host, 1);
       }
       break;
     }
     case DP1: {
       link(MEM, get_loc(term,1), lnk(NIL,0,0,0));
       if (host) {
-        free(MEM, host, 1);
+        clear(MEM, host, 1);
       }
       break;
     }
@@ -195,13 +197,13 @@ export function collect(MEM: Mem, term: Lnk, host: Loc) {
       for (var i = 0; i < arity; ++i) {
         collect(MEM, get_lnk(MEM,term,i), get_loc(term,i));
       }
-      free(MEM, get_loc(term,0), arity);
+      clear(MEM, get_loc(term,0), arity);
       break;
     }
     case VAR: {
       link(MEM, get_loc(term,0), lnk(NIL,0,0,0));
       if (host) {
-        free(MEM, host, 1);
+        clear(MEM, host, 1);
       }
       break;
     }
@@ -235,8 +237,8 @@ export function reduce(MEM: Mem, host: Loc) : Lnk {
             //sanity_check();
             link(MEM, host, get_lnk(MEM, func, 1));
             subst(MEM, get_lnk(MEM, func, 0), get_lnk(MEM, term, 1));
-            free(MEM, get_loc(term,0), 2);
-            free(MEM, get_loc(func,0), 2);
+            clear(MEM, get_loc(term,0), 2);
+            clear(MEM, get_loc(func,0), 2);
             //console.log(show_term(MEM[0]));
             continue;
           }
@@ -260,8 +262,8 @@ export function reduce(MEM: Mem, host: Loc) : Lnk {
             link(MEM, par0+0, lnk(APP, 0, 0, app0));
             link(MEM, par0+1, lnk(APP, 0, 0, app1));
             link(MEM, host, lnk(PAR, get_ex0(func), 0, par0));
-            free(MEM, get_loc(term,0), 2);
-            free(MEM, get_loc(func,0), 2);
+            clear(MEM, get_loc(term,0), 2);
+            clear(MEM, get_loc(func,0), 2);
             //sanity_check();
             //console.log(show_term(MEM[0]));
             return deref(MEM, host);
@@ -297,8 +299,8 @@ export function reduce(MEM: Mem, host: Loc) : Lnk {
             subst(MEM, get_lnk(MEM,term,0), lnk(LAM, 0, 0, lam0));
             subst(MEM, get_lnk(MEM,term,1), lnk(LAM, 0, 0, lam1));
             subst(MEM, get_lnk(MEM,expr,0), lnk(PAR, get_ex0(term), 0, par0));
-            free(MEM, get_loc(term,0), 3);
-            free(MEM, get_loc(expr,0), 2);
+            clear(MEM, get_loc(term,0), 3);
+            clear(MEM, get_loc(expr,0), 2);
             //sanity_check();
             //console.log(show_term(MEM[0]));
             continue;
@@ -323,8 +325,8 @@ export function reduce(MEM: Mem, host: Loc) : Lnk {
               link(MEM, host, get_lnk(MEM, expr, get_tag(term) === DP0 ? 0 : 1));
               subst(MEM, get_lnk(MEM,term,0), get_lnk(MEM,expr,0));
               subst(MEM, get_lnk(MEM,term,1), get_lnk(MEM,expr,1));
-              free(MEM, get_loc(term,0), 3);
-              free(MEM, get_loc(expr,0), 2);
+              clear(MEM, get_loc(term,0), 3);
+              clear(MEM, get_loc(expr,0), 2);
               //sanity_check();
               //console.log(show_term(MEM[0]));
               continue;
@@ -343,8 +345,8 @@ export function reduce(MEM: Mem, host: Loc) : Lnk {
               link(MEM, host, lnk(PAR, get_ex0(expr), 0, get_tag(term) === DP0 ? par0 : par1));
               subst(MEM, get_lnk(MEM,term,0), lnk(PAR,get_ex0(expr),0,par0));
               subst(MEM, get_lnk(MEM,term,1), lnk(PAR,get_ex0(expr),0,par1));
-              free(MEM, get_loc(term,0), 3);
-              free(MEM, get_loc(expr,0), 2);
+              clear(MEM, get_loc(term,0), 3);
+              clear(MEM, get_loc(expr,0), 2);
               //sanity_check();
               //console.log(show_term(MEM[0]));
               return deref(MEM, host);
@@ -375,8 +377,8 @@ export function reduce(MEM: Mem, host: Loc) : Lnk {
             link(MEM, host, lnk(CTR, func, arit, get_tag(term) === DP0 ? ctr0 : ctr1));
             subst(MEM, get_lnk(MEM,term,0), lnk(CTR, ctr0, func, arit));
             subst(MEM, get_lnk(MEM,term,1), lnk(CTR, ctr1, func, arit));
-            free(MEM, get_loc(term,0), 3);
-            free(MEM, get_loc(expr,0), arit);
+            clear(MEM, get_loc(term,0), 3);
+            clear(MEM, get_loc(expr,0), arit);
             //console.log(show_term(MEM[0]));
             return deref(MEM, host);
           }
@@ -392,13 +394,13 @@ export function reduce(MEM: Mem, host: Loc) : Lnk {
         {
 
           case 0: {
-            var loc$0 = get_loc(term,0);
-            var arg$1 = get_lnk(MEM,term,0);
+            var loc$0 = get_loc(term, 0);
+            var arg$1 = get_lnk(MEM, term, 0);
             var loc$0$ = reduce(MEM, loc$0);
-            switch (get_tag(loc$0$) === CTR ? get_ex0(loc$0$) : -1) {
+            switch (get_tag(loc$0$) == CTR ? get_ex0(loc$0$) : -1) {
               case 0: {
-                var fld_loc$2 = get_loc(loc$0$,0);
-                var fld_arg$3 = get_lnk(MEM,loc$0$,0);
+                var fld_loc$2 = get_loc(loc$0$, 0);
+                var fld_arg$3 = get_lnk(MEM, loc$0$, 0);
                 ++GAS;
                 var ctr$4 = alloc(MEM, 0);
                 var ctr$5 = alloc(MEM, 1);
@@ -407,21 +409,21 @@ export function reduce(MEM: Mem, host: Loc) : Lnk {
                 link(MEM, ctr$6+0, lnk(CTR, 0, 0, ctr$4));
                 link(MEM, ctr$6+1, lnk(CTR, 1, 1, ctr$5));
                 link(MEM, host, lnk(CTR, 0, 2, ctr$6));
-                free(MEM, get_loc(loc$0$,0),1)
-                free(MEM, get_loc(term,0),1)
+                clear(MEM, get_loc(loc$0$, 0), 1);
+                clear(MEM, get_loc(term, 0), 1);
                 continue;
               }
               case 1: {
-                var fld_loc$7 = get_loc(loc$0$,0);
-                var fld_arg$8 = get_lnk(MEM,loc$0$,0);
+                var fld_loc$7 = get_loc(loc$0$, 0);
+                var fld_arg$8 = get_lnk(MEM, loc$0$, 0);
                 ++GAS;
                 var cal$9 = alloc(MEM, 1);
                 link(MEM, cal$9+0, fld_arg$8);
                 var cal$10 = alloc(MEM, 1);
                 link(MEM, cal$10+0, lnk(CAL, 0, 1, cal$9));
                 link(MEM, host, lnk(CAL, 1, 1, cal$10));
-                free(MEM, get_loc(loc$0$,0),1)
-                free(MEM, get_loc(term,0),1)
+                clear(MEM, get_loc(loc$0$, 0), 1);
+                clear(MEM, get_loc(term, 0), 1);
                 continue;
               }
               case 2: {
@@ -432,23 +434,23 @@ export function reduce(MEM: Mem, host: Loc) : Lnk {
                 link(MEM, ctr$13+0, lnk(CTR, 1, 0, ctr$11));
                 link(MEM, ctr$13+1, lnk(CTR, 2, 0, ctr$12));
                 link(MEM, host, lnk(CTR, 0, 2, ctr$13));
-                free(MEM, get_loc(loc$0$,0),0)
-                free(MEM, get_loc(term,0),1)
+                clear(MEM, get_loc(loc$0$, 0), 0);
+                clear(MEM, get_loc(term, 0), 1);
                 continue;
               }
             }
           }
 
           case 1: {
-            var loc$0 = get_loc(term,0);
-            var arg$1 = get_lnk(MEM,term,0);
+            var loc$0 = get_loc(term, 0);
+            var arg$1 = get_lnk(MEM, term, 0);
             var loc$0$ = reduce(MEM, loc$0);
-            switch (get_tag(loc$0$) === CTR ? get_ex0(loc$0$) : -1) {
+            switch (get_tag(loc$0$) == CTR ? get_ex0(loc$0$) : -1) {
               case 0: {
-                var fld_loc$2 = get_loc(loc$0$,0);
-                var fld_arg$3 = get_lnk(MEM,loc$0$,0);
-                var fld_loc$4 = get_loc(loc$0$,1);
-                var fld_arg$5 = get_lnk(MEM,loc$0$,1);
+                var fld_loc$2 = get_loc(loc$0$, 0);
+                var fld_arg$3 = get_lnk(MEM, loc$0$, 0);
+                var fld_loc$4 = get_loc(loc$0$, 1);
+                var fld_arg$5 = get_lnk(MEM, loc$0$, 1);
                 ++GAS;
                 var ctr$6 = alloc(MEM, 1);
                 link(MEM, ctr$6+0, fld_arg$5);
@@ -456,54 +458,54 @@ export function reduce(MEM: Mem, host: Loc) : Lnk {
                 link(MEM, ctr$7+0, fld_arg$3);
                 link(MEM, ctr$7+1, lnk(CTR, 0, 1, ctr$6));
                 link(MEM, host, lnk(CTR, 0, 2, ctr$7));
-                free(MEM, get_loc(loc$0$,0),2)
-                free(MEM, get_loc(term,0),1)
+                clear(MEM, get_loc(loc$0$, 0), 2);
+                clear(MEM, get_loc(term, 0), 1);
                 continue;
               }
             }
           }
 
           case 2: {
-            var loc$0 = get_loc(term,0);
-            var arg$1 = get_lnk(MEM,term,0);
+            var loc$0 = get_loc(term, 0);
+            var arg$1 = get_lnk(MEM, term, 0);
             ++GAS;
             var cal$2 = alloc(MEM, 1);
             link(MEM, cal$2+0, arg$1);
             var cal$3 = alloc(MEM, 1);
             link(MEM, cal$3+0, lnk(CAL, 0, 1, cal$2));
             link(MEM, host, lnk(CAL, 3, 1, cal$3));
-            free(MEM, get_loc(term,0),1)
+            clear(MEM, get_loc(term, 0), 1);
             continue;
           }
 
           case 3: {
-            var loc$0 = get_loc(term,0);
-            var arg$1 = get_lnk(MEM,term,0);
+            var loc$0 = get_loc(term, 0);
+            var arg$1 = get_lnk(MEM, term, 0);
             var loc$0$ = reduce(MEM, loc$0);
-            switch (get_tag(loc$0$) === CTR ? get_ex0(loc$0$) : -1) {
+            switch (get_tag(loc$0$) == CTR ? get_ex0(loc$0$) : -1) {
               case 0: {
-                var fld_loc$2 = get_loc(loc$0$,0);
-                var fld_arg$3 = get_lnk(MEM,loc$0$,0);
-                var fld_loc$4 = get_loc(loc$0$,1);
-                var fld_arg$5 = get_lnk(MEM,loc$0$,1);
+                var fld_loc$2 = get_loc(loc$0$, 0);
+                var fld_arg$3 = get_lnk(MEM, loc$0$, 0);
+                var fld_loc$4 = get_loc(loc$0$, 1);
+                var fld_arg$5 = get_lnk(MEM, loc$0$, 1);
                 var fld_loc$2$ = reduce(MEM, fld_loc$2);
-                switch (get_tag(fld_loc$2$) === CTR ? get_ex0(fld_loc$2$) : -1) {
+                switch (get_tag(fld_loc$2$) == CTR ? get_ex0(fld_loc$2$) : -1) {
                   case 0: {
                     ++GAS;
                     var cal$6 = alloc(MEM, 1);
                     link(MEM, cal$6+0, fld_arg$5);
                     link(MEM, host, lnk(CAL, 2, 1, cal$6));
-                    free(MEM, get_loc(fld_loc$2$,0),0)
-                    free(MEM, get_loc(loc$0$,0),2)
-                    free(MEM, get_loc(term,0),1)
+                    clear(MEM, get_loc(fld_loc$2$, 0), 0);
+                    clear(MEM, get_loc(loc$0$, 0), 2);
+                    clear(MEM, get_loc(term, 0), 1);
                     continue;
                   }
                   case 1: {
                     ++GAS;
                     link(MEM, host, fld_arg$5);
-                    free(MEM, get_loc(fld_loc$2$,0),0)
-                    free(MEM, get_loc(loc$0$,0),2)
-                    free(MEM, get_loc(term,0),1)
+                    clear(MEM, get_loc(fld_loc$2$, 0), 0);
+                    clear(MEM, get_loc(loc$0$, 0), 2);
+                    clear(MEM, get_loc(term, 0), 1);
                     continue;
                   }
                 }
@@ -512,6 +514,7 @@ export function reduce(MEM: Mem, host: Loc) : Lnk {
           }
 
         }
+
         // END GENERATED CODE
         
       }
@@ -521,8 +524,10 @@ export function reduce(MEM: Mem, host: Loc) : Lnk {
   }
 }
 
-export function normal(MEM: Mem, host: Loc) : Lnk {
-  return normal_go(MEM, host, {});
+export function normal(MEM: Mem, host: Loc) : number {
+  GAS = 0;
+  normal_go(MEM, host, {});
+  return GAS;
 }
 
 function normal_go(MEM: Mem, host: Loc, seen: MAP<boolean>) : Lnk {

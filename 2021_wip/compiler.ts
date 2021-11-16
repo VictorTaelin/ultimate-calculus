@@ -403,45 +403,57 @@ function sanitize(func: Func): Func {
   return sanitize_func(func);
 }
 
-function compile(func: Func, tab: number): string {
+function compile(func: Func, tab: number, target: string): string {
+  if (target === "js") {
+    var VAR = "var"; 
+    var GAS = "++GAS";
+  } else if (target === "c") {
+    var VAR = "u64";
+    var GAS = "+GAS";
+  } else {
+    throw "Unknown target: " + target;
+  }
+  
   function compile_func(func: Func, tab: number) {
     text += line(tab, "case " + func.name + ": {");
     for (var i = 0; i < func.args.length; ++i) {
-      locs[func.args[i]] = define("loc", "get_loc(term,"+i+")", tab+1);
-      args[func.args[i]] = define("arg", "get_arg(term,"+i+")", tab+1);
+      locs[func.args[i]] = define("loc", "get_loc(term, "+i+")", tab+1);
+      args[func.args[i]] = define("arg", "get_lnk(MEM, term, "+i+")", tab+1);
     }
-    var free = ["free(get_loc(term,0),"+func.args.length+")"];
-    compile_match(func.body, free, tab + 1)
+    var clear = ["clear(MEM, get_loc(term, 0), "+func.args.length+")"];
+    compile_match(func.body, clear, tab + 1)
     //text += line(tab+1, "break;");
     text += line(tab, "}");
   }
 
-  function compile_match(match: Match, free: Array<string>, tab: number) {
+  function compile_match(match: Match, clear: Array<string>, tab: number) {
     switch (match.ctor) {
       case "Cse":
         //console.log("get", match.expr, args);
         var expr_name = locs[match.expr] || "";
-        text += line(tab, "var " + expr_name + "$ = reduce(" + expr_name + ");");
-        text += line(tab, "switch (get_tag("+expr_name+"$) === CTR ? get_ex0(" + expr_name + "$) : -1) {");
+        text += line(tab, VAR+" " + expr_name + "$ = reduce(MEM, " + expr_name + ");");
+        text += line(tab, "switch (get_tag("+expr_name+"$) == CTR ? get_ex0(" + expr_name + "$) : -1) {");
         for (var i = 0; i < match.cses.length; ++i) {
           text += line(tab+1, "case " + i + ": {");
           var cse = match.cses[i];
           for (var j = 0; j < cse[0].length; ++j) {
-            locs[cse[0][j]] = define("fld_loc", "get_loc("+expr_name+"$,"+j+")", tab + 2);
-            args[cse[0][j]] = define("fld_arg", "get_arg("+expr_name+"$,"+j+")", tab + 2);
+            locs[cse[0][j]] = define("fld_loc", "get_loc("+expr_name+"$, "+j+")", tab + 2);
+            args[cse[0][j]] = define("fld_arg", "get_lnk(MEM, "+expr_name+"$, "+j+")", tab + 2);
           }
-          var cse_free = ["free(get_loc("+expr_name+"$,0),"+cse[0].length+")"].concat(free);
-          compile_match(cse[1], cse_free, tab + 2);
+          var cse_clear = ["clear(MEM, get_loc("+expr_name+"$, 0), "+cse[0].length+")"].concat(clear);
+          compile_match(cse[1], cse_clear, tab + 2);
           text += line(tab+1, "}");
         }
         text += line(tab, "}");
         break;
       case "Ret":
-        text += line(tab, "++GAS;");
+        if (GAS) {
+          text += line(tab, "++GAS;");
+        }
         var done = compile_term(match.expr, tab);
-        text += line(tab, "link(host, " + done + ");"); 
-        for (var eraser of free) {
-          text += line(tab, eraser);
+        text += line(tab, "link(MEM, host, " + done + ");"); 
+        for (var eraser of clear) {
+          text += line(tab, eraser + ";");
         }
         text += line(tab, "continue;");
         break;
@@ -455,37 +467,37 @@ function compile(func: Func, tab: number): string {
         return args[term.name] ? args[term.name] : "?";
       case "Dup":
         var name = fresh("dup");
-        text += line(tab, "var " + name + " = alloc(3);");
-        args[term.nam0] = "ptr(DP0, "+name+", 127)"; // TODO
-        args[term.nam1] = "ptr(DP1, "+name+", 127)"; // TODO
+        text += line(tab, VAR + " " + name + " = alloc(MEM, 3);");
+        args[term.nam0] = "lnk(DP0, 127, 0, "+name+")"; // TODO
+        args[term.nam1] = "lnk(DP1, 127, 0, "+name+")"; // TODO
         var expr = compile_term(term.expr, tab);
-        text += line(tab, "link("+name+"+2, "+expr+");");
+        text += line(tab, "link(MEM, "+name+"+2, "+expr+");");
         var body = compile_term(term.body, tab);
         return body;
       case "Lam":
         var name = fresh("lam");
-        text += line(tab, "var " + name + " = alloc(2);");
-        args[term.name] = "ptr(VAR, "+name+", 0)";
+        text += line(tab, VAR + " " + name + " = alloc(MEM, 2);");
+        args[term.name] = "lnk(VAR, 0, 0, "+name+")";
         var body = compile_term(term.body, tab);
-        return "ptr(LAM, " + name + ", 0)";
+        return "lnk(LAM, 0, 0, " + name + ")";
       case "App":
         var name = fresh("app");
         var func = compile_term(term.func, tab);
         var argm = compile_term(term.argm, tab);
-        text += line(tab, "var " + name + " = alloc(2);");
-        text += line(tab, "link(" + name+"+0, " + func + ");");
-        return "ptr(APP, " + name + ", 0)";
+        text += line(tab, VAR + " " + name + " = alloc(MEM, 2);");
+        text += line(tab, "link(MEM, " + name+"+0, " + func + ");");
+        return "lnk(APP, 0, 0, " + name + ")";
       case "Ctr":
         var ctr_args : Array<string> = [];
         for (var i = 0; i < term.args.length; ++i) {
           ctr_args.push(compile_term(term.args[i], tab));
         }
         var name = fresh("ctr");
-        text += line(tab, "var " + name + " = alloc(" + ctr_args.length + ");");
+        text += line(tab, VAR + " " + name + " = alloc(MEM, " + ctr_args.length + ");");
         for (var i = 0; i < ctr_args.length; ++i) {
-          text += line(tab, "link(" + name+"+"+i + ", " + ctr_args[i] + ");");
+          text += line(tab, "link(MEM, " + name+"+"+i + ", " + ctr_args[i] + ");");
         }
-        return "ptr(CTR, " + name + ", " + term.func + ", " + ctr_args.length + ")";
+        return "lnk(CTR, " + term.func + ", " + ctr_args.length + ", " + name + ")";
       case "Cal":
         var cal_args : Array<string> = [];
         for (var i = 0; i < term.args.length; ++i) {
@@ -493,11 +505,11 @@ function compile(func: Func, tab: number): string {
         }
         //console.log("cal_args:", cal_args);
         var name = fresh("cal");
-        text += line(tab, "var " + name + " = alloc(" + cal_args.length + ");");
+        text += line(tab, VAR + " " + name + " = alloc(MEM, " + cal_args.length + ");");
         for (var i = 0; i < cal_args.length; ++i) {
-          text += line(tab, "link(" + name+"+"+i + ", " + cal_args[i] + ");");
+          text += line(tab, "link(MEM, " + name+"+"+i + ", " + cal_args[i] + ");");
         }
-        return "ptr(CAL, " + name + ", " + term.func + ", " + cal_args.length + ")";
+        return "lnk(CAL, " + term.func + ", " + cal_args.length + ", " + name + ")";
     }
   }
 
@@ -507,7 +519,7 @@ function compile(func: Func, tab: number): string {
 
   function define(prefix: string, expr: string, tab: number) : string {
     var name = fresh(prefix);
-    text += line(tab, "var " + name + " = " + expr + ";");
+    text += line(tab, VAR + " " + name + " = " + expr + ";");
     return name;
   }
 
@@ -523,31 +535,6 @@ function compile(func: Func, tab: number): string {
 
 // Tests
 // -----
-
-var code = `
-// nand
-def @0(x y):
-  case x {
-    $0{}: case y {
-      $0{}: $1{}
-      $1{}: $1{}
-    }
-    $1{}: case y {
-      $0{}: $1{}
-      $1{}: $0{}
-    }
-  }
-
-// slow
-def @1(x):
-  case x {
-    $0{}:
-      $0{}
-    $1{p}:
-      dup p0 p1 = p
-      @0(@1(p0) @1(p1))
-  }
-`;
 
 var code = `
 def @0(x):
@@ -575,6 +562,14 @@ def @3(x):
   
 `;
 
+//var code = `
+//def @0(x):
+  //case x {
+    //$0{}: $1{}
+    //$1{}: $0{}
+  //}
+//`;
+
 var defs = parse(code);
 
 //console.log(show_defs(defs));
@@ -583,7 +578,7 @@ console.log("");
 
 console.log("        {\n");
 for (var def of defs) {
-  console.log(compile(def,5));
+  console.log(compile(def,5,"c"));
 }
 console.log("        }");
 

@@ -26,7 +26,7 @@ function convert(arr: Uint32Array): Uint8Array {
   return new Uint8Array(arr.buffer);
 }
 
-export function normal_ffi(MEM: O.Mem, host: O.Loc): O.Lnk {
+export function normal_ffi(MEM: O.Mem, host: O.Loc): number {
   return dylib.symbols.normal_ffi(
     convert(MEM.lnk.data), MEM.lnk.size,
     convert(MEM.use[0].data), MEM.use[0].size,
@@ -38,5 +38,6 @@ export function normal_ffi(MEM: O.Mem, host: O.Loc): O.Lnk {
     convert(MEM.use[6].data), MEM.use[6].size,
     convert(MEM.use[7].data), MEM.use[7].size,
     convert(MEM.use[8].data), MEM.use[8].size,
-    host) as O.Lnk;
+    host
+  ) as number;
 }

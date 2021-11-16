@@ -37,6 +37,8 @@ typedef struct {
   Arr use[9];
 } Mem;
 
+static u32 GAS = 0;
+
 // Array
 // -----
 
@@ -124,8 +126,10 @@ Loc alloc(Mem* mem, u64 size) {
   }
 }
 
-void erase(Mem* mem, Loc loc, u64 size) {
-  array_push(&mem->use[size], loc);
+void clear(Mem* mem, Loc loc, u64 size) {
+  if (size > 0) {
+    array_push(&mem->use[size], loc);
+  }
 }
 
 // Garbage Collection
@@ -138,19 +142,19 @@ void collect(Mem* mem, Lnk term, Loc host) {
         link(mem, get_loc(get_lnk(mem,term,0),0), lnk(NIL,0,0,0));
       }
       collect(mem, get_lnk(mem,term,1), get_loc(term,1));
-      erase(mem, get_loc(term,0), 2);
+      clear(mem, get_loc(term,0), 2);
       break;
     }
     case APP: {
       collect(mem, get_lnk(mem,term,0), get_loc(term,0));
       collect(mem, get_lnk(mem,term,1), get_loc(term,1));
-      erase(mem, get_loc(term,0), 2);
+      clear(mem, get_loc(term,0), 2);
       break;
     }
     case PAR: {
       collect(mem, get_lnk(mem,term,0), get_loc(term,0));
       collect(mem, get_lnk(mem,term,1), get_loc(term,1));
-      erase(mem, get_loc(term,0), 2);
+      clear(mem, get_loc(term,0), 2);
       if (host) {
         link(mem, host, lnk(NIL,0,0,0));
       }
@@ -159,14 +163,14 @@ void collect(Mem* mem, Lnk term, Loc host) {
     case DP0: {
       link(mem, get_loc(term,0), lnk(NIL,0,0,0));
       if (host) {
-        erase(mem, host, 1);
+        clear(mem, host, 1);
       }
       break;
     }
     case DP1: {
       link(mem, get_loc(term,1), lnk(NIL,0,0,0));
       if (host) {
-        erase(mem, host, 1);
+        clear(mem, host, 1);
       }
       break;
     }
@@ -176,13 +180,13 @@ void collect(Mem* mem, Lnk term, Loc host) {
       for (u64 i = 0; i < arity; ++i) {
         collect(mem, get_lnk(mem,term,i), get_loc(term,i));
       }
-      erase(mem, get_loc(term,0), arity);
+      clear(mem, get_loc(term,0), arity);
       break;
     }
     case VAR: {
       link(mem, get_loc(term,0), lnk(NIL,0,0,0));
       if (host) {
-        erase(mem, host, 1);
+        clear(mem, host, 1);
       }
       break;
     }
@@ -209,13 +213,15 @@ Lnk reduce(Mem* MEM, Loc host) {
         Lnk func = reduce(MEM, get_loc(term,0));
         switch (get_tag(func)) {
           case LAM: {
+            ++GAS;
             link(MEM, host, get_lnk(MEM, func, 1));
             subst(MEM, get_lnk(MEM,func,0), get_lnk(MEM,term,1));
-            erase(MEM, get_loc(term,0), 2);
-            erase(MEM, get_loc(func,0), 2);
+            clear(MEM, get_loc(term,0), 2);
+            clear(MEM, get_loc(func,0), 2);
             continue;
           }
           case PAR: {
+            ++GAS;
             Lnk let0 = alloc(MEM, 3);
             Lnk app0 = alloc(MEM, 2);
             Lnk app1 = alloc(MEM, 2);
@@ -228,8 +234,8 @@ Lnk reduce(Mem* MEM, Loc host) {
             link(MEM, par0+0, lnk(APP, 0, 0, app0));
             link(MEM, par0+1, lnk(APP, 0, 0, app1));
             link(MEM, host, lnk(PAR, get_ex0(func), 0, par0));
-            erase(MEM, get_loc(term,0), 2);
-            erase(MEM, get_loc(func,0), 2);
+            clear(MEM, get_loc(term,0), 2);
+            clear(MEM, get_loc(func,0), 2);
             return deref(MEM, host);
           }
         }
@@ -240,6 +246,7 @@ Lnk reduce(Mem* MEM, Loc host) {
         Lnk expr = reduce(MEM, get_loc(term,2));
         switch (get_tag(expr)) {
           case LAM: {
+            ++GAS;
             Lnk lam0 = alloc(MEM, 2);
             Lnk lam1 = alloc(MEM, 2);
             Lnk par0 = alloc(MEM, 2);
@@ -253,19 +260,21 @@ Lnk reduce(Mem* MEM, Loc host) {
             subst(MEM, get_lnk(MEM,term,0), lnk(LAM, 0, 0, lam0));
             subst(MEM, get_lnk(MEM,term,1), lnk(LAM, 0, 0, lam1));
             subst(MEM, get_lnk(MEM,expr,0), lnk(PAR, get_ex0(term), 0, par0));
-            erase(MEM, get_loc(term,0), 3);
-            erase(MEM, get_loc(expr,0), 2);
+            clear(MEM, get_loc(term,0), 3);
+            clear(MEM, get_loc(expr,0), 2);
             continue;
           }
           case PAR: {
             if (get_ex0(term) == get_ex0(expr)) {
+              ++GAS;
               link(MEM, host, get_lnk(MEM,expr, get_tag(term) == DP0 ? 0 : 1));
               subst(MEM, get_lnk(MEM,term,0), get_lnk(MEM,expr,0));
               subst(MEM, get_lnk(MEM,term,1), get_lnk(MEM,expr,1));
-              erase(MEM, get_loc(term,0), 3);
-              erase(MEM, get_loc(expr,0), 2);
+              clear(MEM, get_loc(term,0), 3);
+              clear(MEM, get_loc(expr,0), 2);
               continue;
             } else {
+              ++GAS;
               Lnk par0 = alloc(MEM, 2);
               Lnk par1 = alloc(MEM, 2);
               Lnk let0 = alloc(MEM, 3);
@@ -279,14 +288,165 @@ Lnk reduce(Mem* MEM, Loc host) {
               link(MEM, host, lnk(PAR, get_ex0(expr), 0, get_tag(term) == DP0 ? par0 : par1));
               subst(MEM, get_lnk(MEM,term,0), lnk(PAR,get_ex0(expr),0,par0));
               subst(MEM, get_lnk(MEM,term,1), lnk(PAR,get_ex0(expr),0,par1));
-              erase(MEM, get_loc(term,0), 3);
-              erase(MEM, get_loc(expr,0), 2);
+              clear(MEM, get_loc(term,0), 3);
+              clear(MEM, get_loc(expr,0), 2);
               continue;
             }
+          }
+          case CTR: {
+            ++GAS;
+            u64 func = get_ex0(expr);
+            u64 arit = get_ex1(expr);
+            u64 ctr0 = alloc(MEM, arit);
+            u64 ctr1 = alloc(MEM, arit);
+            for (u64 i = 0; i < arit; ++i) {
+              u64 leti = alloc(MEM, 3);
+              link(MEM, ctr0+i, lnk(DP0, 0, 0, leti));
+              link(MEM, ctr1+i, lnk(DP1, 0, 0, leti));
+              link(MEM, leti+2, get_lnk(MEM,expr,i));
+            }
+            link(MEM, host, lnk(CTR, func, arit, get_tag(term) == DP0 ? ctr0 : ctr1));
+            subst(MEM, get_lnk(MEM,term,0), lnk(CTR, ctr0, func, arit));
+            subst(MEM, get_lnk(MEM,term,1), lnk(CTR, ctr1, func, arit));
+            clear(MEM, get_loc(term,0), 3);
+            clear(MEM, get_loc(expr,0), arit);
+            return deref(MEM, host);
           }
         }
         break;
       }
+
+      case CAL: {
+        switch (get_ex0(term))
+        // START GENERATED CODE
+        {
+
+          case 0: {
+            u64 loc$0 = get_loc(term, 0);
+            u64 arg$1 = get_lnk(MEM, term, 0);
+            u64 loc$0$ = reduce(MEM, loc$0);
+            switch (get_tag(loc$0$) == CTR ? get_ex0(loc$0$) : -1) {
+              case 0: {
+                u64 fld_loc$2 = get_loc(loc$0$, 0);
+                u64 fld_arg$3 = get_lnk(MEM, loc$0$, 0);
+                ++GAS;
+                u64 ctr$4 = alloc(MEM, 0);
+                u64 ctr$5 = alloc(MEM, 1);
+                link(MEM, ctr$5+0, fld_arg$3);
+                u64 ctr$6 = alloc(MEM, 2);
+                link(MEM, ctr$6+0, lnk(CTR, 0, 0, ctr$4));
+                link(MEM, ctr$6+1, lnk(CTR, 1, 1, ctr$5));
+                link(MEM, host, lnk(CTR, 0, 2, ctr$6));
+                clear(MEM, get_loc(loc$0$, 0), 1);
+                clear(MEM, get_loc(term, 0), 1);
+                continue;
+              }
+              case 1: {
+                u64 fld_loc$7 = get_loc(loc$0$, 0);
+                u64 fld_arg$8 = get_lnk(MEM, loc$0$, 0);
+                ++GAS;
+                u64 cal$9 = alloc(MEM, 1);
+                link(MEM, cal$9+0, fld_arg$8);
+                u64 cal$10 = alloc(MEM, 1);
+                link(MEM, cal$10+0, lnk(CAL, 0, 1, cal$9));
+                link(MEM, host, lnk(CAL, 1, 1, cal$10));
+                clear(MEM, get_loc(loc$0$, 0), 1);
+                clear(MEM, get_loc(term, 0), 1);
+                continue;
+              }
+              case 2: {
+                ++GAS;
+                u64 ctr$11 = alloc(MEM, 0);
+                u64 ctr$12 = alloc(MEM, 0);
+                u64 ctr$13 = alloc(MEM, 2);
+                link(MEM, ctr$13+0, lnk(CTR, 1, 0, ctr$11));
+                link(MEM, ctr$13+1, lnk(CTR, 2, 0, ctr$12));
+                link(MEM, host, lnk(CTR, 0, 2, ctr$13));
+                clear(MEM, get_loc(loc$0$, 0), 0);
+                clear(MEM, get_loc(term, 0), 1);
+                continue;
+              }
+            }
+          }
+
+          case 1: {
+            u64 loc$0 = get_loc(term, 0);
+            u64 arg$1 = get_lnk(MEM, term, 0);
+            u64 loc$0$ = reduce(MEM, loc$0);
+            switch (get_tag(loc$0$) == CTR ? get_ex0(loc$0$) : -1) {
+              case 0: {
+                u64 fld_loc$2 = get_loc(loc$0$, 0);
+                u64 fld_arg$3 = get_lnk(MEM, loc$0$, 0);
+                u64 fld_loc$4 = get_loc(loc$0$, 1);
+                u64 fld_arg$5 = get_lnk(MEM, loc$0$, 1);
+                ++GAS;
+                u64 ctr$6 = alloc(MEM, 1);
+                link(MEM, ctr$6+0, fld_arg$5);
+                u64 ctr$7 = alloc(MEM, 2);
+                link(MEM, ctr$7+0, fld_arg$3);
+                link(MEM, ctr$7+1, lnk(CTR, 0, 1, ctr$6));
+                link(MEM, host, lnk(CTR, 0, 2, ctr$7));
+                clear(MEM, get_loc(loc$0$, 0), 2);
+                clear(MEM, get_loc(term, 0), 1);
+                continue;
+              }
+            }
+          }
+
+          case 2: {
+            u64 loc$0 = get_loc(term, 0);
+            u64 arg$1 = get_lnk(MEM, term, 0);
+            ++GAS;
+            u64 cal$2 = alloc(MEM, 1);
+            link(MEM, cal$2+0, arg$1);
+            u64 cal$3 = alloc(MEM, 1);
+            link(MEM, cal$3+0, lnk(CAL, 0, 1, cal$2));
+            link(MEM, host, lnk(CAL, 3, 1, cal$3));
+            clear(MEM, get_loc(term, 0), 1);
+            continue;
+          }
+
+          case 3: {
+            u64 loc$0 = get_loc(term, 0);
+            u64 arg$1 = get_lnk(MEM, term, 0);
+            u64 loc$0$ = reduce(MEM, loc$0);
+            switch (get_tag(loc$0$) == CTR ? get_ex0(loc$0$) : -1) {
+              case 0: {
+                u64 fld_loc$2 = get_loc(loc$0$, 0);
+                u64 fld_arg$3 = get_lnk(MEM, loc$0$, 0);
+                u64 fld_loc$4 = get_loc(loc$0$, 1);
+                u64 fld_arg$5 = get_lnk(MEM, loc$0$, 1);
+                u64 fld_loc$2$ = reduce(MEM, fld_loc$2);
+                switch (get_tag(fld_loc$2$) == CTR ? get_ex0(fld_loc$2$) : -1) {
+                  case 0: {
+                    ++GAS;
+                    u64 cal$6 = alloc(MEM, 1);
+                    link(MEM, cal$6+0, fld_arg$5);
+                    link(MEM, host, lnk(CAL, 2, 1, cal$6));
+                    clear(MEM, get_loc(fld_loc$2$, 0), 0);
+                    clear(MEM, get_loc(loc$0$, 0), 2);
+                    clear(MEM, get_loc(term, 0), 1);
+                    continue;
+                  }
+                  case 1: {
+                    ++GAS;
+                    link(MEM, host, fld_arg$5);
+                    clear(MEM, get_loc(fld_loc$2$, 0), 0);
+                    clear(MEM, get_loc(loc$0$, 0), 2);
+                    clear(MEM, get_loc(term, 0), 1);
+                    continue;
+                  }
+                }
+              }
+            }
+          }
+
+        }
+        // END GENERATED CODE
+        
+      }
+
+
     }
     return term;
   }
@@ -356,7 +516,7 @@ Lnk normal(Mem* MEM, Loc host) {
   return normal_go(MEM, host, seen);
 }
 
-void normal_ffi(
+u32 normal_ffi(
   u8* lnk_data, u32 lnk_size,
   u8* use0_data, u32 use0_size,
   u8* use1_data, u32 use1_size,
@@ -369,6 +529,8 @@ void normal_ffi(
   u8* use8_data, u32 use8_size,
   u32 host
 ) {
+  GAS = 0;
+
   Mem mem;
   mem.lnk.data = (u64*)lnk_data;
   mem.lnk.size = (u64)lnk_size;
@@ -391,4 +553,6 @@ void normal_ffi(
   mem.use[8].data = (u64*)use8_data;
   mem.use[8].size = (u64)use8_size;
   normal(&mem, (u64)host);
+
+  return GAS;
 }
